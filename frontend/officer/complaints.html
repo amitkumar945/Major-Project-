@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assigned Complaints &middot; DSVV Grievance Management System</title>
+  <meta name="description" content="Complaints assigned to you.">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/pages.css">
+</head>
+<body>
+  <!-- ==================================================================
+       Guard: this project must be served over http, not opened as a file.
+       Browsers block JavaScript modules loaded from a file:// path, so the
+       page would otherwise render as unstyled text with nothing working.
+       This is a plain (non-module) inline script, so it still runs there.
+       =================================================================== -->
+  <script>
+    if (location.protocol === 'file:') {
+      var box = 'max-width:40rem;margin:8vh auto;padding:2rem;background:#fff;'
+        + 'border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(16,24,40,.06)';
+      document.documentElement.innerHTML =
+        '<head><meta charset="utf-8"><title>Please start the server</title></head>'
+        + '<body style="margin:0;font:16px/1.6 system-ui,Segoe UI,sans-serif;background:#f6f7fb;color:#1e293b">'
+        + '<div style="' + box + '">'
+        + '<p style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;'
+        + 'border-radius:50%;background:#fef2f2;color:#dc2626;font-size:26px;font-weight:700;margin:0">!</p>'
+        + '<h1 style="font-size:1.5rem;margin:1rem 0 .5rem;color:#0f172a">This page needs a web server</h1>'
+        + '<p style="margin:0 0 1.5rem;color:#475569">You opened the file directly, so the browser blocked '
+        + 'the stylesheets and scripts. Start the local server instead &mdash; it takes one step.</p>'
+        + '<h2 style="font-size:1rem;margin:0 0 .5rem;color:#0f172a">Easiest way</h2>'
+        + '<p style="margin:0 0 1.5rem;color:#475569">Double-click <b>start-server.bat</b> in the '
+        + '<b>frontend</b> folder.</p>'
+        + '<h2 style="font-size:1rem;margin:0 0 .5rem;color:#0f172a">Or from a terminal</h2>'
+        + '<p style="margin:0 0 .5rem;color:#475569">Open a terminal in the <b>frontend</b> folder and run:</p>'
+        + '<pre style="margin:0 0 1.5rem;padding:1rem;background:#f1f5f9;border-radius:8px;'
+        + 'overflow-x:auto;font-size:14px">python -m http.server 5500</pre>'
+        + '<p style="margin:0;color:#475569">Then open '
+        + '<a href="http://localhost:5500" style="color:#4f46e5;font-weight:600">http://localhost:5500</a></p>'
+        + '</div></body>';
+    }
+  </script>
+
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <div class="app">
+    <!-- filled in by components/shell.js -->
+    <div id="sidebar"></div>
+
+    <div class="app__main">
+      <div id="topbar"></div>
+      <main class="page" id="main">
+        <div id="root"></div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="/assets/js/pages/officerComplaints.js"></script>
+</body>
+</html>

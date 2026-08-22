@@ -1,0 +1,8 @@
+{
+  // Used only when the "frontend" folder itself is opened as the VS Code
+  // workspace. In that case the folder already is the web root, so "/" is
+  // correct. (When the parent folder is opened, ../.vscode/settings.json
+  // sets the root to /frontend instead.)
+  "liveServer.settings.root": "/",
+  "liveServer.settings.port": 5500
+}

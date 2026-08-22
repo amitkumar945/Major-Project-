@@ -1,0 +1,8 @@
+{
+  // The site uses root-absolute paths (/assets/..., /register.html), so the
+  // web root must be the "frontend" folder, not the workspace folder.
+  // Without this, Live Server serves "e:\Major Project UI" and every
+  // stylesheet and module 404s.
+  "liveServer.settings.root": "/frontend",
+  "liveServer.settings.port": 5500
+}

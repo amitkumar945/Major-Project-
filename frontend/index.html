@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DSVV Grievance Management System</title>
+  <meta name="description" content="Register, track and resolve campus grievances at Dev Sanskriti Vishwavidyalaya. One window for water, electricity, building and computer lab complaints.">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+
+  <!-- Inter, with the existing system stack as the fallback when offline. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/pages.css">
+</head>
+<body class="page-landing">
+  <!-- ==================================================================
+       Guard: this project must be served over http, not opened as a file.
+       Browsers block JavaScript modules loaded from a file:// path, so the
+       page would otherwise render as unstyled text with nothing working.
+       This is a plain (non-module) inline script, so it still runs there.
+       =================================================================== -->
+  <script>
+    if (location.protocol === 'file:') {
+      var box = 'max-width:40rem;margin:8vh auto;padding:2rem;background:#fff;'
+        + 'border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 1px 3px rgba(16,24,40,.06)';
+      document.documentElement.innerHTML =
+        '<head><meta charset="utf-8"><title>Please start the server</title></head>'
+        + '<body style="margin:0;font:16px/1.6 system-ui,Segoe UI,sans-serif;background:#f6f7fb;color:#1e293b">'
+        + '<div style="' + box + '">'
+        + '<p style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;'
+        + 'border-radius:50%;background:#fef2f2;color:#dc2626;font-size:26px;font-weight:700;margin:0">!</p>'
+        + '<h1 style="font-size:1.5rem;margin:1rem 0 .5rem;color:#0f172a">This page needs a web server</h1>'
+        + '<p style="margin:0 0 1.5rem;color:#475569">You opened the file directly, so the browser blocked '
+        + 'the stylesheets and scripts. Start the local server instead &mdash; it takes one step.</p>'
+        + '<h2 style="font-size:1rem;margin:0 0 .5rem;color:#0f172a">Easiest way</h2>'
+        + '<p style="margin:0 0 1.5rem;color:#475569">Double-click <b>start-server.bat</b> in the '
+        + '<b>frontend</b> folder.</p>'
+        + '<h2 style="font-size:1rem;margin:0 0 .5rem;color:#0f172a">Or from a terminal</h2>'
+        + '<p style="margin:0 0 .5rem;color:#475569">Open a terminal in the <b>frontend</b> folder and run:</p>'
+        + '<pre style="margin:0 0 1.5rem;padding:1rem;background:#f1f5f9;border-radius:8px;'
+        + 'overflow-x:auto;font-size:14px">python -m http.server 5500</pre>'
+        + '<p style="margin:0;color:#475569">Then open '
+        + '<a href="http://localhost:5500" style="color:#4f46e5;font-weight:600">http://localhost:5500</a></p>'
+        + '</div></body>';
+    }
+  </script>
+
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <div class="site">
+    <!-- navbar is injected by components/publicChrome.js -->
+    <div id="navbar"></div>
+
+    <main class="site__main landing" id="main">
+      <!-- ============================================================ HERO -->
+      <section class="hero">
+        <div class="container">
+          <div class="hero__grid">
+
+            <div class="hero__copy">
+              <h1 class="hero__title">
+                Your Problem.
+                <span class="hero__title-accent">Our Responsibility.</span>
+              </h1>
+
+              <p class="hero__lead">
+                Report campus issues quickly and track every step until resolution.
+              </p>
+
+              <div class="hero__cta">
+                <a class="btn btn--primary btn--lg" href="/register.html">
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#file-plus"></use></svg>
+                  Register a Complaint
+                </a>
+                <a class="btn btn--outline btn--lg" href="/track.html">
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#search"></use></svg>
+                  Track Complaint
+                </a>
+              </div>
+
+              <p class="hero__trust">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#check-circle"></use></svg>
+                Simple
+                <span class="hero__trust-sep" aria-hidden="true">&bull;</span>
+                Transparent
+                <span class="hero__trust-sep" aria-hidden="true">&bull;</span>
+                Trackable
+              </p>
+            </div>
+
+            <!-- ===================================================== CAMPUS -->
+            <!--
+              The official campus photograph belongs at /assets/img/campus.jpg.
+              Until that file exists the <img> removes itself on error and the
+              labelled placeholder below shows instead — see assets/img/README.md.
+            -->
+            <div class="hero__media">
+              <div class="hero__media-frame">
+                <div class="hero__media-fallback">
+                  <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#image"></use></svg>
+                  <b>Campus photograph</b>
+                  <span>Add the official photo as <code>/assets/img/campus.jpg</code> and it appears here.</span>
+                </div>
+                <img src="/assets/img/campus.jpg"
+                     alt="Dev Sanskriti Vishwavidyalaya campus"
+                     width="1600" height="1000" loading="eager"
+                     onerror="this.remove()">
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ============================================ FEATURE HIGHLIGHTS -->
+          <div class="highlights">
+            <div class="highlight">
+              <span class="highlight__icon">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#cpu"></use></svg>
+              </span>
+              AI-Assisted Routing
+            </div>
+            <div class="highlight">
+              <span class="highlight__icon">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#map-pin"></use></svg>
+              </span>
+              Geo-tag Support
+            </div>
+            <div class="highlight">
+              <span class="highlight__icon">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#refresh"></use></svg>
+              </span>
+              Real-time Updates
+            </div>
+            <div class="highlight">
+              <span class="highlight__icon">
+                <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#shield-check"></use></svg>
+              </span>
+              Secure &amp; Transparent
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================================================== HOW IT WORKS -->
+      <section class="section" id="how">
+        <div class="container">
+          <div class="section__head">
+            <h2 class="section__title">How It Works</h2>
+          </div>
+
+          <ol class="process reveal">
+            <li class="process__step">
+              <span class="process__icon">
+                <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#pencil"></use></svg>
+              </span>
+              <div>
+                <p class="process__num">01. Submit Complaint</p>
+                <p class="process__text">Describe your problem and upload photo if any.</p>
+              </div>
+            </li>
+
+            <svg class="icon icon-md process__arrow" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+
+            <li class="process__step">
+              <span class="process__icon">
+                <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#cpu"></use></svg>
+              </span>
+              <div>
+                <p class="process__num">02. Smart Routing</p>
+                <p class="process__text">AI system assigns the complaint to the right department.</p>
+              </div>
+            </li>
+
+            <svg class="icon icon-md process__arrow" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+
+            <li class="process__step">
+              <span class="process__icon">
+                <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#user-check"></use></svg>
+              </span>
+              <div>
+                <p class="process__num">03. Officer Action</p>
+                <p class="process__text">Concerned officer works on your issue.</p>
+              </div>
+            </li>
+
+            <svg class="icon icon-md process__arrow" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+
+            <li class="process__step">
+              <span class="process__icon">
+                <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#check-circle"></use></svg>
+              </span>
+              <div>
+                <p class="process__num">04. Resolution</p>
+                <p class="process__text">Issue resolved and feedback collected.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- =============================== DEPARTMENTS + WHY USE THIS PORTAL -->
+      <section class="section section--alt" id="departments">
+        <div class="container">
+          <div class="split">
+
+            <!-- ----------------------------------------- our departments -->
+            <div>
+              <div class="section__label">
+                <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#building"></use></svg>
+                <h2>Our Departments</h2>
+              </div>
+
+              <div class="dept-grid reveal">
+                <article class="dept-card">
+                  <span class="dept-card__icon dept-card__icon--water">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#droplet"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="dept-card__name">Jal Kal Vibhag</h3>
+                    <p class="dept-card__en">Water Supply &amp; Sanitation Issues</p>
+                  </div>
+                  <a class="dept-card__link" href="/student/new-complaint.html">
+                    File Complaint
+                    <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+                  </a>
+                </article>
+
+                <article class="dept-card">
+                  <span class="dept-card__icon dept-card__icon--power">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#zap"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="dept-card__name">Vidyut Vibhag</h3>
+                    <p class="dept-card__en">Electricity &amp; Power Related Issues</p>
+                  </div>
+                  <a class="dept-card__link" href="/student/new-complaint.html">
+                    File Complaint
+                    <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+                  </a>
+                </article>
+
+                <article class="dept-card">
+                  <span class="dept-card__icon dept-card__icon--build">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#wrench"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="dept-card__name">Nirman Vibhag</h3>
+                    <p class="dept-card__en">Construction &amp; Maintenance Issues</p>
+                  </div>
+                  <a class="dept-card__link" href="/student/new-complaint.html">
+                    File Complaint
+                    <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+                  </a>
+                </article>
+
+                <article class="dept-card">
+                  <span class="dept-card__icon dept-card__icon--lab">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#monitor"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="dept-card__name">Computer Lab</h3>
+                    <p class="dept-card__en">Lab &amp; Computer Related Issues</p>
+                  </div>
+                  <a class="dept-card__link" href="/student/new-complaint.html">
+                    File Complaint
+                    <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+                  </a>
+                </article>
+              </div>
+
+              <!-- ============================== VIEW ALL DEPARTMENTS -->
+              <div class="dept-more">
+                <a class="btn btn--outline" href="/student/new-complaint.html">
+                  View All Departments
+                  <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#arrow-right"></use></svg>
+                </a>
+              </div>
+            </div>
+
+            <!-- ------------------------------------ why use this portal -->
+            <div>
+              <div class="section__label">
+                <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#star"></use></svg>
+                <h2>Why Use This Portal?</h2>
+              </div>
+
+              <div class="benefits reveal">
+                <div class="benefit">
+                  <span class="benefit__icon benefit__icon--ai">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#cpu"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="benefit__title">AI-Assisted Routing</h3>
+                    <p class="benefit__text">Smartly routes your complaint to the correct department.</p>
+                  </div>
+                </div>
+
+                <div class="benefit">
+                  <span class="benefit__icon benefit__icon--photo">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#image"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="benefit__title">Photo &amp; Location Support</h3>
+                    <p class="benefit__text">Upload images and location for better understanding.</p>
+                  </div>
+                </div>
+
+                <div class="benefit">
+                  <span class="benefit__icon benefit__icon--track">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#file-search"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="benefit__title">Real-time Tracking</h3>
+                    <p class="benefit__text">Track the status of your complaint in real time.</p>
+                  </div>
+                </div>
+
+                <div class="benefit">
+                  <span class="benefit__icon benefit__icon--star">
+                    <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#star"></use></svg>
+                  </span>
+                  <div>
+                    <h3 class="benefit__title">Feedback &amp; Rating</h3>
+                    <p class="benefit__text">Rate the resolution and help improve the service.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================= FAQ -->
+      <section class="section" id="faq">
+        <div class="container">
+          <div class="section__head">
+            <h2 class="section__title">Common Questions</h2>
+          </div>
+
+          <div class="faq" id="faq-list">
+            <article class="card faq__item">
+              <h3>
+                <button type="button" class="faq__q" aria-expanded="false" aria-controls="faq-a-1">
+                  Who can register a complaint?
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#chevron-down"></use></svg>
+                </button>
+              </h3>
+              <div class="faq__a" id="faq-a-1" hidden>
+                Any student or staff member of the university. Create an account with your student
+                or employee ID and university email address, and you can start filing complaints
+                immediately.
+              </div>
+            </article>
+
+            <article class="card faq__item">
+              <h3>
+                <button type="button" class="faq__q" aria-expanded="false" aria-controls="faq-a-2">
+                  How long does it take to resolve a complaint?
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#chevron-down"></use></svg>
+                </button>
+              </h3>
+              <div class="faq__a" id="faq-a-2" hidden>
+                It depends on the priority the system assigns. Urgent complaints carry a one-day
+                deadline, high three days, medium seven days and low fourteen days. If the deadline
+                passes, the complaint is escalated automatically.
+              </div>
+            </article>
+
+            <article class="card faq__item">
+              <h3>
+                <button type="button" class="faq__q" aria-expanded="false" aria-controls="faq-a-3">
+                  Can I track a complaint without signing in?
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#chevron-down"></use></svg>
+                </button>
+              </h3>
+              <div class="faq__a" id="faq-a-3" hidden>
+                Yes. Use the reference number you received when the complaint was registered on the
+                <a href="/track.html">Track complaint</a> page. Signing in additionally lets you see
+                your full history and give feedback.
+              </div>
+            </article>
+
+            <article class="card faq__item">
+              <h3>
+                <button type="button" class="faq__q" aria-expanded="false" aria-controls="faq-a-4">
+                  What if the problem is not actually fixed?
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#chevron-down"></use></svg>
+                </button>
+              </h3>
+              <div class="faq__a" id="faq-a-4" hidden>
+                Rate the resolution honestly. If you are not satisfied you can reopen the same
+                complaint, which sends it back to the department with its full history attached
+                rather than starting a fresh complaint.
+              </div>
+            </article>
+
+            <article class="card faq__item">
+              <h3>
+                <button type="button" class="faq__q" aria-expanded="false" aria-controls="faq-a-5">
+                  Is my complaint visible to other students?
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#chevron-down"></use></svg>
+                </button>
+              </h3>
+              <div class="faq__a" id="faq-a-5" hidden>
+                No. Only you, the assigned department officer and the grievance cell can see the
+                details of your complaint. Reference numbers used for duplicate detection show the
+                title and department only.
+              </div>
+            </article>
+
+            <article class="card faq__item">
+              <h3>
+                <button type="button" class="faq__q" aria-expanded="false" aria-controls="faq-a-6">
+                  Someone already reported the same problem. Should I still file one?
+                  <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#chevron-down"></use></svg>
+                </button>
+              </h3>
+              <div class="faq__a" id="faq-a-6" hidden>
+                The system shows you similar complaints with a similarity score before you submit.
+                Following the existing complaint is usually faster, but you can always continue and
+                file your own if the details differ.
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- footer is injected by components/publicChrome.js -->
+    <div id="footer"></div>
+  </div>
+
+  <script type="module" src="/assets/js/pages/landing.js"></script>
+</body>
+</html>
