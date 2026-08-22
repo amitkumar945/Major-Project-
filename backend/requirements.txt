@@ -1,0 +1,36 @@
+# Grievance Management System - backend dependencies
+#
+#     pip install -r requirements.txt
+#
+# Versions are lower-bounded rather than pinned so the project installs on a
+# fresh Python 3.10+ machine without a resolver conflict.
+
+# ------------------------------------------------------------------- core
+Flask>=3.0                 # web framework
+Flask-Cors>=4.0            # CORS for the frontend origin
+pymongo>=4.6               # MongoDB driver
+PyJWT>=2.8                 # JWT creation and verification
+python-dotenv>=1.0         # load .env
+bcrypt>=4.1                # password hashing
+Werkzeug>=3.0              # secure_filename, HTTP exceptions (ships with Flask)
+
+# ------------------------------------------------------------------ testing
+pytest>=8.0
+
+# ------------------------------------------------------- OCR (OPTIONAL)
+# Not required to run the system: OCR is off by default and complaint
+# submission works without it. Install these only to enable OCR_ENABLED=true.
+#
+#   pip install opencv-python pytesseract
+#
+# pytesseract also needs the Tesseract binary installed separately:
+#   Windows  https://github.com/UB-Mannheim/tesseract/wiki
+#   Linux    sudo apt install tesseract-ocr
+#   macOS    brew install tesseract
+#
+# opencv-python>=4.9
+# pytesseract>=0.3.10
+# numpy>=1.26
+#
+# Alternative OCR engine (heavier, downloads model weights on first use):
+# easyocr>=1.7
