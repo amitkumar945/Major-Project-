@@ -25,6 +25,11 @@ COLLECTIONS = (
     "audit_logs",
     "otps",
     "counters",
+    # Mobile session support: long-lived refresh tokens and push device
+    # registrations. Both are per-user and safe to drop without data loss -
+    # clearing them only forces a re-login / re-registration.
+    "refresh_tokens",
+    "devices",
 )
 
 
@@ -96,6 +101,18 @@ def _create_indexes(db) -> None:
     db.otps.create_index([("expiresAt", ASCENDING)], expireAfterSeconds=0)
     db.otps.create_index([("email", ASCENDING), ("purpose", ASCENDING)])
 
+    # Refresh tokens: looked up by hash on every refresh, so that index is
+    # unique. Expired rows are removed by Mongo itself, which also means a
+    # token can never outlive its expiry even if nothing revokes it.
+    db.refresh_tokens.create_index([("tokenHash", ASCENDING)], unique=True)
+    db.refresh_tokens.create_index([("userId", ASCENDING)])
+    db.refresh_tokens.create_index([("expiresAt", ASCENDING)], expireAfterSeconds=0)
+
+    # Push devices: one row per device token, so re-registering the same
+    # device updates rather than duplicates it.
+    db.devices.create_index([("token", ASCENDING)], unique=True)
+    db.devices.create_index([("userId", ASCENDING)])
+
 
 def get_db():
     if _db is None:
@@ -157,6 +174,16 @@ def otps():
 
 def counters():
     return get_db().counters
+
+
+def refresh_tokens():
+    """Long-lived mobile refresh tokens (hashed, never stored in the clear)."""
+    return get_db().refresh_tokens
+
+
+def devices():
+    """Registered push-notification devices, one row per device token."""
+    return get_db().devices
 
 
 def next_sequence(name: str) -> int:

@@ -10,7 +10,7 @@ from flask import Blueprint, request
 from services import notification_service
 from utils.helpers import to_bool, to_int
 from utils.jwt_utils import current_user, jwt_required
-from utils.responses import error, success
+from utils.responses import error, maybe_paginated, success
 
 bp = Blueprint("notifications", __name__, url_prefix="/api/notifications")
 
@@ -18,14 +18,19 @@ bp = Blueprint("notifications", __name__, url_prefix="/api/notifications")
 @bp.get("")
 @jwt_required
 def list_notifications():
-    return success(
-        notification_service.get_for_user(
-            current_user()["id"],
-            unread_only=to_bool(request.args.get("unreadOnly"), False),
-            type_=request.args.get("type", ""),
-            limit=to_int(request.args.get("limit"), 100),
-        )
+    """The caller's notification feed.
+
+    Bare array by default (the web notifications page maps over it directly);
+    the standard paginated envelope when `?page=` / `?pageSize=` is sent, which
+    is what the mobile app should use for an infinite-scrolling feed.
+    """
+    items = notification_service.get_for_user(
+        current_user()["id"],
+        unread_only=to_bool(request.args.get("unreadOnly"), False),
+        type_=request.args.get("type", ""),
+        limit=to_int(request.args.get("limit"), 100),
     )
+    return success(maybe_paginated(items, request.args))
 
 
 @bp.get("/unread-count")

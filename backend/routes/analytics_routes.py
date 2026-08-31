@@ -5,11 +5,16 @@ Data comes back in the `[{name, value}]` shape the existing SVG chart helpers
 already consume, so `charts.js` needed no changes.
 """
 
-from flask import Blueprint, request
+from flask import Blueprint, Response, request
 
 from constants import ROLE_ADMIN, ROLE_OFFICER, ROLE_STUDENT
-from services import analytics_service
-from utils.jwt_utils import current_user, jwt_required, role_required
+from services import analytics_service, export_service
+from utils.jwt_utils import (
+    current_user,
+    jwt_required,
+    jwt_required_allow_query,
+    role_required,
+)
 from utils.responses import success
 
 bp = Blueprint("analytics", __name__, url_prefix="/api/analytics")
@@ -101,4 +106,23 @@ def trend():
             "monthly": analytics_service.monthly_trend(items),
             "weekly": analytics_service.weekly_load(items),
         }
+    )
+
+
+@bp.get("/export")
+@jwt_required_allow_query
+def export_summary():
+    """Download the headline analytics figures as CSV.
+
+    Scoped exactly like the charts: a student exports their own numbers, an
+    officer their queue, an admin the whole institution.
+    """
+    csv_text = export_service.analytics_csv(_scope_for(current_user()))
+    return Response(
+        "﻿" + csv_text,
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{export_service.filename("analytics")}"'
+        },
     )

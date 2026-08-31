@@ -14,6 +14,14 @@ python-dotenv>=1.0         # load .env
 bcrypt>=4.1                # password hashing
 Werkzeug>=3.0              # secure_filename, HTTP exceptions (ships with Flask)
 
+# --------------------------------------------------------------- production
+# WSGI server for a real deployment (Render, Railway, any VPS):
+#     gunicorn wsgi:app
+# The Flask dev server in `python app.py` stays the local workflow.
+# On Windows gunicorn does not run - use `waitress-serve --port=5000 wsgi:app`
+# after `pip install waitress`, or just keep using `python app.py`.
+gunicorn>=21.2; sys_platform != "win32"
+
 # ------------------------------------------------------------------ testing
 pytest>=8.0
 

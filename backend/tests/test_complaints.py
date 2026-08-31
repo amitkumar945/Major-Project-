@@ -133,16 +133,16 @@ def test_public_tracking_exposes_the_location_for_the_map(client, make_complaint
     complaint = make_complaint()
     data = client.get(f"/api/complaints/track/{complaint['id']}").get_json()["data"]
 
-    assert data["location"]["latitude"] == 29.9457
-    assert data["location"]["longitude"] == 78.1642
+    assert data["location"]["latitude"] == 29.99965
+    assert data["location"]["longitude"] == 78.1946
     assert data["location"]["address"] == "Gayatri Bhavan main entrance"
 
 
 def test_public_tracking_withholds_the_gps_accuracy(client, make_complaint):
     """Accuracy describes the reporter's device, not the complaint."""
     complaint = make_complaint({"location": {
-        "latitude": 29.9457,
-        "longitude": 78.1642,
+        "latitude": 29.99965,
+        "longitude": 78.1946,
         "address": "Gayatri Bhavan main entrance",
         "accuracy": 12,
     }})
@@ -156,15 +156,15 @@ def test_public_tracking_withholds_the_gps_accuracy(client, make_complaint):
 
 def test_location_is_stored_for_the_map(client, make_complaint):
     complaint = make_complaint({"location": {
-        "latitude": 29.9461,
-        "longitude": 78.1638,
+        "latitude": 29.99995,
+        "longitude": 78.1942,
         "address": "Academic Block C, Second Floor",
         "block": "Academic Zone",
         "accuracy": 8,
     }})
 
-    assert complaint["location"]["latitude"] == 29.9461
-    assert complaint["location"]["longitude"] == 78.1638
+    assert complaint["location"]["latitude"] == 29.99995
+    assert complaint["location"]["longitude"] == 78.1942
     assert complaint["location"]["accuracy"] == 8
     assert complaint["location"]["block"] == "Academic Zone"
 
@@ -172,8 +172,8 @@ def test_location_is_stored_for_the_map(client, make_complaint):
 def test_string_coordinates_are_stored_as_numbers(client, auth, student_token, water_complaint):
     """Multipart form submissions deliver every field as a string."""
     payload = {**water_complaint, "location": {
-        "latitude": "29.9457",
-        "longitude": "78.1642",
+        "latitude": "29.99965",
+        "longitude": "78.1946",
         "address": "Gayatri Bhavan main entrance",
         "accuracy": "15",
     }}
@@ -182,14 +182,14 @@ def test_string_coordinates_are_stored_as_numbers(client, auth, student_token, w
     location = response.get_json()["data"]["location"]
     assert isinstance(location["latitude"], float)
     assert isinstance(location["longitude"], float)
-    assert location["latitude"] == 29.9457
+    assert location["latitude"] == 29.99965
     assert location["accuracy"] == 15.0
 
 
 def test_out_of_range_coordinates_are_rejected(client, auth, student_token, water_complaint):
     payload = {**water_complaint, "location": {
         "latitude": 200,
-        "longitude": 78.1642,
+        "longitude": 78.1946,
         "address": "Somewhere impossible",
     }}
     response = client.post("/api/complaints", json=payload, headers=auth(student_token))
@@ -200,8 +200,8 @@ def test_out_of_range_coordinates_are_rejected(client, auth, student_token, wate
 
 def test_coordinates_without_a_landmark_are_rejected(client, auth, student_token, water_complaint):
     payload = {**water_complaint, "location": {
-        "latitude": 29.9457,
-        "longitude": 78.1642,
+        "latitude": 29.99965,
+        "longitude": 78.1946,
         "address": "   ",
     }}
     response = client.post("/api/complaints", json=payload, headers=auth(student_token))

@@ -4,10 +4,15 @@ OTP generation and verification.
 Codes are hashed before storage (an OTP is a short-lived password), expire via
 a MongoDB TTL index, and are limited by attempt count and resend cooldown.
 
-DEVELOPMENT MODE: when `OTP_DEV_MODE` is true the code is returned in the API
+DEVELOPMENT MODE: when dev mode is active the code is returned in the API
 response so the flow can be exercised without a mail or SMS provider. That is
-also the only situation in which a code ever leaves the server. Wiring a real
-provider means implementing `_send()` and setting OTP_DEV_MODE=false.
+also the only situation in which a code ever leaves the server, and it is
+gated by `config.is_otp_dev_mode`, which requires BOTH the OTP_DEV_MODE flag
+and a non-production environment - a deployed server cannot leak codes by
+misconfiguration alone. Wiring a real provider means setting MAIL_ENABLED=true
+with real credentials; `_send()` is already implemented.
+
+The code itself is never written to the logs in any mode.
 """
 
 import hashlib
@@ -37,6 +42,17 @@ def _config(key, default=None):
     return current_app.config.get(key, default)
 
 
+def _dev_mode() -> bool:
+    """Whether a code may travel back in the API response.
+
+    Delegates to `config.is_otp_dev_mode`, which requires a non-production
+    environment on top of the flag itself.
+    """
+    from config import is_otp_dev_mode
+
+    return is_otp_dev_mode(current_app.config)
+
+
 def _hash_code(code: str, email: str) -> str:
     """Hash the code with the JWT secret as key, bound to the email so a code
     issued for one address cannot be replayed against another."""
@@ -49,15 +65,31 @@ def _generate_code(length: int) -> str:
     return "".join(secrets.choice("0123456789") for _ in range(length))
 
 
-def _send(email: str, code: str, purpose: str) -> bool:
-    """Delivery hook for a future email/SMS provider.
+def _send(email: str, code: str, purpose: str, expires_in: int = 300) -> bool:
+    """Email the code, or say plainly that it was not sent.
 
-    Intentionally not implemented: no provider is configured, and the code must
-    not be printed anywhere it could be harvested. In dev mode the route returns
-    the code directly instead.
+    Returns True only when SMTP really accepted the message. When mail is not
+    configured the caller falls back to dev mode; when mail IS configured but
+    the send fails, this raises - answering 200 "Verification code sent." while
+    nothing was sent is the one outcome that must never happen.
     """
-    logger.info("OTP for %s (%s) generated; delivery provider not configured.", email, purpose)
-    return False
+    from services import email_service
+
+    if not email_service.is_configured():
+        logger.info("OTP for %s (%s) generated; no mail provider configured.", email, purpose)
+        return False
+
+    try:
+        email_service.send_otp_email(email, code, purpose, expires_in)
+        return True
+    except email_service.EmailError as exc:
+        # The exception carries SMTP detail, which can include the server
+        # response - never the credentials, and never the code itself.
+        logger.error("OTP email to %s failed (%s): %s", email, exc.reason, exc)
+        # 503 when the server is misconfigured or unreachable, 502 when it
+        # answered but refused - both are 5xx: the fault is ours, not the user's.
+        status = 503 if exc.reason in ("config", "connect", "timeout") else 502
+        raise ApiException("Unable to send OTP email. Please try again later.", status)
 
 
 def send_otp(email: str, purpose: str = PURPOSE_VERIFY) -> dict:
@@ -102,8 +134,23 @@ def send_otp(email: str, purpose: str = PURPOSE_VERIFY) -> dict:
         upsert=True,
     )
 
-    delivered = _send(email, code, purpose)
-    dev_mode = _config("OTP_DEV_MODE", True)
+    # NOT the raw flag: `is_otp_dev_mode` refuses to honour it in production,
+    # so a stray OTP_DEV_MODE=true in a deployed .env cannot leak codes.
+    dev_mode = _dev_mode()
+
+    try:
+        delivered = _send(email, code, purpose, expiry_seconds)
+    except ApiException:
+        # Delivery failed and there is no dev-mode fallback. Drop the record so
+        # a code nobody can read is not left occupying the resend cooldown.
+        otps().delete_one({"email": email, "purpose": purpose})
+        raise
+
+    if not delivered and not dev_mode:
+        # Mail is unconfigured and dev mode is off: there is no way for the
+        # user to ever learn this code, so fail loudly instead of pretending.
+        otps().delete_one({"email": email, "purpose": purpose})
+        raise ApiException("Unable to send OTP email. Please try again later.", 503)
 
     result = {
         "email": email,
@@ -113,8 +160,9 @@ def send_otp(email: str, purpose: str = PURPOSE_VERIFY) -> dict:
         "devMode": bool(dev_mode),
     }
 
-    if dev_mode:
-        # Development convenience only - never reached when OTP_DEV_MODE=false.
+    if dev_mode and not delivered:
+        # Development convenience only. Once the code has really been emailed
+        # it must not also travel back in the API response.
         result["otp"] = code
         result["notice"] = (
             "Development mode: the code is returned here because no email/SMS "

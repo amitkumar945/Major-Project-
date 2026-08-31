@@ -11,7 +11,7 @@ from constants import ROLE_ADMIN
 from services import department_service
 from utils.helpers import to_bool
 from utils.jwt_utils import current_user, role_required
-from utils.responses import success, validation_error
+from utils.responses import maybe_paginated, success, validation_error
 from utils.validators import validate_department
 
 bp = Blueprint("departments", __name__, url_prefix="/api/departments")
@@ -19,12 +19,14 @@ bp = Blueprint("departments", __name__, url_prefix="/api/departments")
 
 @bp.get("")
 def list_departments():
-    """Public: the landing page renders this before anyone signs in."""
-    return success(
-        department_service.get_departments(
-            active_only=to_bool(request.args.get("activeOnly"), False)
-        )
+    """Public: the landing page renders this before anyone signs in.
+
+    Bare array by default; paginated envelope on `?page=` / `?pageSize=`.
+    """
+    items = department_service.get_departments(
+        active_only=to_bool(request.args.get("activeOnly"), False)
     )
+    return success(maybe_paginated(items, request.args))
 
 
 @bp.get("/<code>")

@@ -64,6 +64,13 @@ class Config:
     JWT_EXPIRY_HOURS = _int("JWT_EXPIRY_HOURS", 12)
     JWT_ISSUER = _str("JWT_ISSUER", "dsvv-gms")
 
+    # Mobile sessions. A phone cannot ask the user to sign in twice a day, so
+    # the app gets a SHORT access token plus a long-lived refresh token it can
+    # exchange silently. The website keeps JWT_EXPIRY_HOURS above and never
+    # touches either of these.
+    MOBILE_ACCESS_TOKEN_MINUTES = _int("MOBILE_ACCESS_TOKEN_MINUTES", 60)
+    REFRESH_TOKEN_DAYS = _int("REFRESH_TOKEN_DAYS", 30)
+
     # ---------------------------------------------------------------- files
     UPLOAD_FOLDER = _str("UPLOAD_FOLDER", str(BASE_DIR / "uploads"))
     # Frontend caps uploads at 5 MB per file (UPLOAD_LIMITS in constants.js).
@@ -80,7 +87,15 @@ class Config:
     OTP_RESEND_COOLDOWN = _int("OTP_RESEND_COOLDOWN", 30)  # seconds
     # In dev mode the OTP is returned in the API response instead of being
     # emailed. MUST be false once a real mail/SMS provider is configured.
-    OTP_DEV_MODE = _bool("OTP_DEV_MODE", True)
+    #
+    # Defaults to FALSE: leaking a reset code is an account takeover, so the
+    # unsafe behaviour has to be asked for explicitly rather than inherited by
+    # a deployment whose .env simply never mentions the key. `TestConfig` and
+    # `DevelopmentDefaults` below turn it back on for local work.
+    #
+    # This value is only a request. `is_otp_dev_mode()` decides the effective
+    # setting and refuses to honour it outside development - see that function.
+    OTP_DEV_MODE = _bool("OTP_DEV_MODE", False)
     # When true, registration requires a verified OTP before the account is
     # created. Off by default so the existing frontend register flow still works.
     OTP_REQUIRED_FOR_REGISTER = _bool("OTP_REQUIRED_FOR_REGISTER", False)
@@ -91,6 +106,15 @@ class Config:
         "CORS_ORIGINS",
         "http://localhost:5500,http://127.0.0.1:5500,http://localhost:5000,http://127.0.0.1:5000",
     )
+
+    # ----------------------------------------------------------------- push
+    # Mobile push notifications (Firebase Cloud Messaging). Off by default:
+    # the in-app notification feed is the source of truth and works without
+    # any of this. No credential is ever hardcoded - FCM_CREDENTIALS_FILE
+    # points at a service-account JSON kept OUTSIDE the repository.
+    PUSH_ENABLED = _bool("PUSH_ENABLED", False)
+    FCM_PROJECT_ID = _str("FCM_PROJECT_ID", "")
+    FCM_CREDENTIALS_FILE = _str("FCM_CREDENTIALS_FILE", "")
 
     # ------------------------------------------------------------------ ocr
     # OCR is optional: complaint submission must keep working when it is off.
@@ -108,6 +132,8 @@ class Config:
     SEED_ON_START = _bool("SEED_ON_START", True)
     FLASK_ENV = _str("FLASK_ENV", "development")
     DEBUG = _bool("FLASK_DEBUG", FLASK_ENV == "development")
+    # True only for the test-suite's configuration; see `is_otp_dev_mode`.
+    IS_TEST = False
     # Serve the existing frontend folder from Flask so one server runs everything.
     SERVE_FRONTEND = _bool("SERVE_FRONTEND", True)
     FRONTEND_FOLDER = _str("FRONTEND_FOLDER", str(BASE_DIR.parent / "frontend"))
@@ -120,9 +146,36 @@ class TestConfig(Config):
     JWT_SECRET_KEY = _str("JWT_SECRET_KEY", "") or "test-only-secret-not-for-production"
     SEED_ON_START = False
     OTP_DEV_MODE = True
+    IS_TEST = True
     RATE_LIMIT_ENABLED = False
     DEBUG = False
     SERVE_FRONTEND = False
+
+
+# Environments in which returning an OTP to the caller is acceptable.
+NON_PRODUCTION_ENVS = {"development", "dev", "local", "test", "testing"}
+
+
+def is_otp_dev_mode(config) -> bool:
+    """The effective OTP dev-mode setting, which is NOT simply the flag.
+
+    Returning a verification code in an API response hands anyone who knows an
+    address the ability to reset that account's password. A single mistyped or
+    forgotten line in a production `.env` must therefore not be enough to turn
+    it on, so the flag is honoured only when the process is also demonstrably
+    not in production: the test configuration, or Flask debug / a development
+    FLASK_ENV.
+
+    `config` is anything exposing the keys - a Flask `app.config` or a Config
+    class - so callers can use whichever they hold.
+    """
+    get = config.get if hasattr(config, "get") else lambda key, default=None: getattr(config, key, default)
+
+    if not get("OTP_DEV_MODE", False):
+        return False
+    if get("IS_TEST", False):
+        return True
+    return bool(get("DEBUG", False)) or str(get("FLASK_ENV", "")).lower() in NON_PRODUCTION_ENVS
 
 
 def get_config(name: str = ""):

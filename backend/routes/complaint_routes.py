@@ -9,7 +9,7 @@ whichever it needs.
 
 import json
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, Response, current_app, request
 
 from constants import (
     OFFICER_STATUS_OPTIONS,
@@ -18,10 +18,16 @@ from constants import (
     ROLE_OFFICER,
     ROLE_STUDENT,
 )
-from services import ai_service, complaint_service
+from services import ai_service, complaint_service, export_service
+from services.complaint_service import BULK_MAX_PAGE_SIZE
 from utils.file_utils import save_files
 from utils.helpers import to_bool, to_int
-from utils.jwt_utils import current_user, jwt_required, role_required
+from utils.jwt_utils import (
+    current_user,
+    jwt_required,
+    jwt_required_allow_query,
+    role_required,
+)
 from utils.responses import ApiException, error, success, validation_error
 from utils.validators import (
     validate_complaint,
@@ -53,6 +59,19 @@ def _payload() -> dict:
     return request.get_json(silent=True) or {}
 
 
+def _csv_response(csv_text: str, download_name: str):
+    """Wrap CSV text in a download response.
+
+    The UTF-8 BOM makes Excel open accented characters correctly; without it
+    names render as mojibake.
+    """
+    return Response(
+        "﻿" + csv_text,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
+    )
+
+
 def _filters() -> dict:
     """Query-string filters - the same names the frontend already sends."""
     args = request.args
@@ -71,6 +90,20 @@ def _filters() -> dict:
         "sortDir": args.get("sortDir", "desc"),
         "page": to_int(args.get("page"), 1),
         "pageSize": to_int(args.get("pageSize"), 10),
+        # The dashboards and charts read every matching row to compute their
+        # aggregates, and have done so since before this cap existed. They ask
+        # for it either with `?bulk=true` or with the exact page size the
+        # existing `getAllComplaints()` helper sends.
+        #
+        # Matching that ONE value, rather than "anything large", is deliberate:
+        # a `> 1000` test would let any caller opt itself out of the cap simply
+        # by asking for more, which is precisely what the cap exists to stop.
+        # Anything else above API_MAX_PAGE_SIZE is clamped down to it.
+        #
+        # Rows stay scoped by role either way, so this widens volume, never
+        # visibility: a student asking for 10000 still gets only their own.
+        "allow_bulk": to_bool(args.get("bulk"), False)
+        or to_int(args.get("pageSize"), 10) == BULK_MAX_PAGE_SIZE,
     }
 
 
@@ -158,6 +191,31 @@ def statistics():
             scope["department"] = request.args["department"]
 
     return success(complaint_service.get_statistics(scope))
+
+
+@bp.get("/export")
+@jwt_required_allow_query
+def export_complaints():
+    """Download the current complaint list as CSV.
+
+    Takes the same query-string filters as the list endpoint, so the file
+    matches whatever is on screen. Scoping is enforced by `get_complaints`,
+    which is handed the caller's own user - a student can only ever export
+    their own complaints.
+
+    The token may arrive as `?token=` because a browser download cannot set an
+    Authorization header.
+    """
+    user = current_user()
+    filters = _filters()
+
+    if user["role"] == ROLE_OFFICER and not filters["officerId"] and not filters["department"]:
+        filters["officerId"] = user["id"]
+    elif user["role"] == ROLE_STUDENT:
+        filters["userId"] = user["id"]
+
+    csv_text = export_service.complaints_csv(filters, user)
+    return _csv_response(csv_text, export_service.filename("complaints"))
 
 
 @bp.get("/escalations")

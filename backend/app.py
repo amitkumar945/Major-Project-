@@ -44,10 +44,20 @@ def create_app(config_object=None) -> Flask:
             "and set a strong random value (see the README)."
         )
 
-    if not app.config.get("DEBUG") and app.config.get("OTP_DEV_MODE"):
+    # Two distinct situations, and they need different messages.
+    from config import is_otp_dev_mode
+
+    if is_otp_dev_mode(app.config):
         logger.warning(
-            "OTP_DEV_MODE is on outside development: verification codes are "
-            "returned in API responses. Set OTP_DEV_MODE=false."
+            "OTP dev mode is ACTIVE: verification codes are returned in API "
+            "responses. This is development-only behaviour."
+        )
+    elif app.config.get("OTP_DEV_MODE"):
+        # Asked for, but refused because this is a production environment.
+        logger.warning(
+            "OTP_DEV_MODE=true was ignored: codes are only returned in a "
+            "development or test environment. Set OTP_DEV_MODE=false to "
+            "silence this, and configure MAIL_* so codes can be delivered."
         )
 
     # -------------------------------------------------------------- uploads
@@ -90,6 +100,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.auth_routes import bp as auth_bp
     from routes.complaint_routes import bp as complaint_bp
     from routes.department_routes import bp as department_bp
+    from routes.device_routes import bp as device_bp
     from routes.feedback_routes import bp as feedback_bp
     from routes.file_routes import bp as file_bp
     from routes.notification_routes import bp as notification_bp
@@ -99,6 +110,7 @@ def _register_blueprints(app: Flask) -> None:
     for blueprint in (
         auth_bp, complaint_bp, ai_bp, officer_bp, department_bp,
         user_bp, notification_bp, feedback_bp, analytics_bp, admin_bp, file_bp,
+        device_bp,
     ):
         app.register_blueprint(blueprint)
 
@@ -172,12 +184,19 @@ def _register_meta_routes(app: Flask) -> None:
         except Exception:
             database_ok = False
 
+        from services import email_service
+
         return (
             jsonify(
                 {
                     "success": database_ok,
                     "message": "API is running." if database_ok else "Database is unreachable.",
-                    "data": {"status": "ok" if database_ok else "degraded", "database": database_ok},
+                    "data": {
+                        "status": "ok" if database_ok else "degraded",
+                        "database": database_ok,
+                        # Whether mail is usable - never any credential value.
+                        "email": email_service.is_configured(),
+                    },
                 }
             ),
             200 if database_ok else 503,

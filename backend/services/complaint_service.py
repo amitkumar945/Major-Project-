@@ -41,6 +41,15 @@ from utils.responses import ApiException
 
 PROJECTION = {"_id": 0}
 
+# Page-size limits. `API_MAX_PAGE_SIZE` is what an HTTP caller may ask for -
+# small enough that a phone is never handed an unusable payload and no single
+# request can pull the whole collection. `BULK_MAX_PAGE_SIZE` is the ceiling
+# for internal, server-side bulk reads (CSV export, dashboard aggregates) that
+# genuinely need every matching row; those pass `allow_bulk=True`.
+DEFAULT_PAGE_SIZE = 10
+API_MAX_PAGE_SIZE = 100
+BULK_MAX_PAGE_SIZE = 10000
+
 # The seven canonical stages, mirroring `utils/complaintTimeline.js`.
 TIMELINE_STAGES = [
     {"key": "submitted", "label": "Complaint Submitted",
@@ -60,7 +69,24 @@ TIMELINE_STAGES = [
 ]
 
 
-def _timeline_entry(label: str, description: str, actor: str, variant: str = None, key: str = "update") -> dict:
+def _timeline_entry(
+    label: str,
+    description: str,
+    actor: str,
+    variant: str = None,
+    key: str = "update",
+    remark: str = "",
+) -> dict:
+    """Build one timeline row.
+
+    Every timeline write in the system goes through this function, so the
+    shape stays identical no matter which route triggered the change.
+
+    `description` is what the stage always means ("The complaint status was
+    updated to Resolved"). `remark` is the optional free-text note the actor
+    typed, kept in its own field so it is shown *alongside* the description
+    rather than replacing it.
+    """
     entry = {
         "id": uid("tl"),
         "key": key,
@@ -72,6 +98,8 @@ def _timeline_entry(label: str, description: str, actor: str, variant: str = Non
     }
     if variant:
         entry["variant"] = variant
+    if remark and remark.strip():
+        entry["remark"] = remark.strip()
     return entry
 
 
@@ -147,7 +175,7 @@ def _normalise_location(location) -> dict:
     """Store coordinates as numbers, whatever the transport delivered.
 
     Multipart submissions send every field as a string, so without this the
-    same complaint would persist `"29.9457"` from the form path and `29.9457`
+    same complaint would persist `"29.99965"` from the form path and `29.99965`
     from the JSON path - which breaks map rendering and any geo query.
     """
     if not isinstance(location, dict):
@@ -323,10 +351,27 @@ def get_complaints(options: dict, user: dict = None) -> dict:
     sort_by = options.get("sortBy") or "submittedAt"
     direction = -1 if (options.get("sortDir") or "desc") == "desc" else 1
 
-    page_size = max(1, min(int(options.get("pageSize") or 10), 10000))
+    # Two different ceilings, because there are two different callers.
+    #
+    # A request that arrived over HTTP is capped at API_MAX_PAGE_SIZE, so no
+    # client can ask for an unbounded slice. Internal bulk reads - the CSV
+    # export, and the dashboard/analytics pages that legitimately need every
+    # row to compute charts - pass `allow_bulk=True` and keep the old ceiling.
+    # Capping those at 100 would silently truncate the charts instead of
+    # protecting anything, since the work happens server-side either way.
+    ceiling = BULK_MAX_PAGE_SIZE if options.get("allow_bulk") else API_MAX_PAGE_SIZE
+    try:
+        requested = int(options.get("pageSize") or DEFAULT_PAGE_SIZE)
+    except (TypeError, ValueError):
+        requested = DEFAULT_PAGE_SIZE
+    page_size = max(1, min(requested, ceiling))
     total = complaints().count_documents(query)
     total_pages = max((total + page_size - 1) // page_size, 1)
-    page = max(1, min(int(options.get("page") or 1), total_pages))
+    try:
+        requested_page = int(options.get("page") or 1)
+    except (TypeError, ValueError):
+        requested_page = 1
+    page = max(1, min(requested_page, total_pages))
 
     cursor = (
         complaints()
@@ -465,9 +510,12 @@ def update_status(complaint_id: str, status: str, actor: dict, note: str = "") -
 
     entry = _timeline_entry(
         f"Status changed to {status}",
-        note or f'The complaint status was updated to "{status}".',
+        f'The complaint status was updated to "{status}".',
         actor.get("name", "Department Officer"),
         variant="success" if status == STATUS_RESOLVED else None,
+        # The officer's note is a remark, not a replacement for the stage
+        # description - the timeline should show both.
+        remark=note,
     )
 
     updated = _patch(complaint_id, patch, entry)

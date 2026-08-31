@@ -118,6 +118,25 @@ def _confidence(best: dict, runner_up: dict, token_count: int) -> float:
     return round(max(0.35, min(raw, 0.95)), 2)
 
 
+def _alternatives(scores: list, department: str, limit: int = 3) -> list:
+    """The ranked list shown as "Department match strength".
+
+    Always includes the predicted department, even when it did not win on
+    keywords (a category fallback), so the card can never show a set of
+    departments that excludes the one the complaint was actually routed to.
+    """
+    ranked = [{"department": item["department"], "score": item["score"]} for item in scores]
+    top = ranked[:limit]
+
+    if not any(entry["department"] == department for entry in top):
+        predicted = next((e for e in ranked if e["department"] == department), None)
+        if predicted:
+            # Put it first: it is the routing decision, whatever it scored.
+            top = [predicted] + top[: limit - 1]
+
+    return top
+
+
 def classify(title: str = "", description: str = "", category: str = "", processed: dict = None) -> dict:
     """Predict the department for a complaint.
 
@@ -155,10 +174,11 @@ def classify(title: str = "", description: str = "", category: str = "", process
         "confidence": confidence,
         "source": source,
         "keywords": original_terms[:6],
-        "alternatives": [
-            {"department": entry["department"], "score": entry["score"]}
-            for entry in scores[:3]
-        ],
+        # The predicted department must always appear here: on a category
+        # fallback every score is 0, so a plain top-3 slice sorted
+        # alphabetically could drop the winner and leave the card showing only
+        # departments the complaint was not routed to.
+        "alternatives": _alternatives(scores, department),
         "scores": scores,
         "method": "weighted-keyword-rules",
         "modelTrained": False,

@@ -8,7 +8,7 @@ from constants import ROLE_ADMIN, ROLE_OFFICER
 from services import assignment_service, audit_service, auth_service, complaint_service
 from utils.helpers import to_bool, to_int
 from utils.jwt_utils import current_user, jwt_required, role_required
-from utils.responses import ApiException, error, success, validation_error
+from utils.responses import ApiException, error, maybe_paginated, success, validation_error
 from utils.validators import validate_officer
 
 bp = Blueprint("officers", __name__, url_prefix="/api/officers")
@@ -17,14 +17,18 @@ bp = Blueprint("officers", __name__, url_prefix="/api/officers")
 @bp.get("")
 @jwt_required
 def list_officers():
-    """Officer directory with live workload figures."""
-    return success(
-        assignment_service.get_officers(
-            department=request.args.get("department", ""),
-            active_only=to_bool(request.args.get("activeOnly"), False),
-            search=request.args.get("search", ""),
-        )
+    """Officer directory with live workload figures.
+
+    Returns a bare array by default - the admin and complaint-details screens
+    spread and sort it directly - or the standard paginated envelope when the
+    caller sends `?page=` / `?pageSize=`.
+    """
+    officers = assignment_service.get_officers(
+        department=request.args.get("department", ""),
+        active_only=to_bool(request.args.get("activeOnly"), False),
+        search=request.args.get("search", ""),
     )
+    return success(maybe_paginated(officers, request.args))
 
 
 @bp.get("/suggest")

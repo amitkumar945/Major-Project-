@@ -18,13 +18,22 @@ def _config(key: str, default=None):
     return current_app.config.get(key, default)
 
 
-def create_token(user: dict) -> str:
-    """Sign a JWT carrying the user id, role and expiry."""
+def create_token(user: dict, expires_in_minutes: int = None) -> str:
+    """Sign a JWT carrying the user id, role and expiry.
+
+    `expires_in_minutes` overrides the default lifetime; mobile sign-ins pass
+    the shorter MOBILE_ACCESS_TOKEN_MINUTES because they also get a refresh
+    token. Called without it - as every existing caller does - the behaviour
+    is exactly what it was.
+    """
     from utils.helpers import utcnow
     from datetime import timedelta
 
     issued = utcnow()
-    expires = issued + timedelta(hours=_config("JWT_EXPIRY_HOURS", 12))
+    if expires_in_minutes:
+        expires = issued + timedelta(minutes=expires_in_minutes)
+    else:
+        expires = issued + timedelta(hours=_config("JWT_EXPIRY_HOURS", 12))
 
     payload = {
         "sub": user["id"],
@@ -49,17 +58,30 @@ def decode_token(token: str) -> dict:
     )
 
 
-def extract_token() -> str:
-    """Read the bearer token from the Authorization header."""
+def extract_token(allow_query: bool = False) -> str:
+    """Read the bearer token from the Authorization header.
+
+    `allow_query` additionally accepts `?token=` (or `?access_token=`). That is
+    opt-in per route because a token in a URL can leak through server logs,
+    `Referer` headers and browser history. Only the file-download route enables
+    it, and only because a browser cannot attach an `Authorization` header to
+    an `<img src>` / `<a href>` request - see `routes/file_routes.py`.
+    """
     header = request.headers.get("Authorization", "")
     if header.startswith("Bearer "):
         return header[7:].strip()
+
+    if allow_query:
+        return (
+            request.args.get("token") or request.args.get("access_token") or ""
+        ).strip()
+
     return ""
 
 
-def _authenticate():
+def _authenticate(allow_query_token: bool = False):
     """Shared verification. Returns (claims, None) or (None, response)."""
-    token = extract_token()
+    token = extract_token(allow_query=allow_query_token)
     if not token:
         return None, error("Authentication required. Please sign in.", 401)
 
@@ -92,6 +114,24 @@ def jwt_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         _, failure = _authenticate()
+        if failure:
+            return failure
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def jwt_required_allow_query(fn):
+    """Like `jwt_required`, but the token may also arrive as `?token=`.
+
+    Strictly for GET routes a browser loads directly (images, downloads), where
+    no `Authorization` header can be set. Authorisation is unchanged: the route
+    still checks who may see the resource.
+    """
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        _, failure = _authenticate(allow_query_token=True)
         if failure:
             return failure
         return fn(*args, **kwargs)

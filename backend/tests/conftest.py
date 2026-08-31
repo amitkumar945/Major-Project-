@@ -1,9 +1,16 @@
 """
 Shared pytest fixtures.
 
-Every test runs against a separate database (`grievance_management_test`),
-which is dropped and re-seeded for each test, so tests never interfere with the
-development data or with each other.
+Every test runs against a separate database, which is emptied and re-seeded
+before each test, so tests never interfere with the development data or with
+each other.
+
+The database name carries this process's PID (see TEST_MONGO_URI below), so a
+second pytest run - or any script opened against the test database while a run
+is in progress - gets its own database instead of wiping the tables out from
+under the first one. Without that, concurrent runs share one fixed name and
+collide mid-test as DuplicateKeyError from the seeder, or as assertion failures
+in tests whose seed data another process had already deleted.
 """
 
 import os
@@ -18,6 +25,14 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 os.environ["APP_CONFIG"] = "test"
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-not-for-production")
+
+# Give this pytest process its own database unless the caller pinned one.
+# `xdist` workers share a run, so key off the parent run when it is present.
+if not os.environ.get("TEST_MONGO_URI"):
+    _run_id = os.environ.get("PYTEST_XDIST_TESTRUNUID") or str(os.getpid())
+    os.environ["TEST_MONGO_URI"] = (
+        f"mongodb://localhost:27017/grievance_management_test_{_run_id}"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -101,8 +116,8 @@ def water_complaint():
         ),
         "category": "Water",
         "location": {
-            "latitude": 29.9457,
-            "longitude": 78.1642,
+            "latitude": 29.99965,
+            "longitude": 78.1946,
             "address": "Gayatri Bhavan main entrance",
         },
     }

@@ -10,6 +10,8 @@ render errors in that shape.
 import re
 
 from constants import (
+    CAMPUS_BOUNDS,
+    CAMPUS_POLYGON,
     CATEGORIES,
     DEPARTMENT_NAMES,
     PRIORITY_LIST,
@@ -127,8 +129,49 @@ def validate_complaint(values: dict) -> dict:
     return errors
 
 
+def point_in_polygon(lat: float, lng: float, polygon=CAMPUS_POLYGON) -> bool:
+    """Ray-casting point-in-polygon test over (latitude, longitude) vertices.
+
+    Standard even-odd rule: count how many polygon edges a ray cast east from
+    the point crosses. An odd count means the point is inside. The campus is
+    small enough that treating lat/lng as a flat plane costs nothing.
+    """
+    inside = False
+    count = len(polygon)
+    j = count - 1
+    for i in range(count):
+        lat_i, lng_i = polygon[i]
+        lat_j, lng_j = polygon[j]
+        # Does the edge straddle the point's latitude?
+        if (lat_i > lat) != (lat_j > lat):
+            # Longitude where the edge crosses that latitude.
+            crossing = (lng_j - lng_i) * (lat - lat_i) / (lat_j - lat_i) + lng_i
+            if lng < crossing:
+                inside = not inside
+        j = i
+    return inside
+
+
+def in_campus_bounds(lat: float, lng: float) -> bool:
+    """Padded bounding-box test - the tolerant check used by validation.
+
+    `point_in_polygon` is the exact outline; this box adds roughly 150 m of
+    slack so ordinary GPS drift at the gate or along the boundary wall does not
+    reject a genuine complaint.
+    """
+    return (
+        CAMPUS_BOUNDS["minLatitude"] <= lat <= CAMPUS_BOUNDS["maxLatitude"]
+        and CAMPUS_BOUNDS["minLongitude"] <= lng <= CAMPUS_BOUNDS["maxLongitude"]
+    )
+
+
 def validate_location(location) -> dict:
-    """The frontend requires coordinates plus a landmark on step 3."""
+    """The frontend requires coordinates plus a landmark on step 3.
+
+    Coordinates must also fall inside the DSVV campus: this is a campus
+    grievance system, and the check lives here as well as in the browser so it
+    cannot be skipped by calling the API directly.
+    """
     errors = {}
     if not isinstance(location, dict):
         return {"location": "Capture or enter the complaint location"}
@@ -141,6 +184,11 @@ def validate_location(location) -> dict:
             lat, lng = float(lat), float(lng)
             if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
                 errors["location"] = "Coordinates are out of range"
+            elif not in_campus_bounds(lat, lng):
+                errors["location"] = (
+                    "Location must be inside the DSVV campus. "
+                    "Move the pin to the correct spot on campus."
+                )
         except (TypeError, ValueError):
             errors["location"] = "Coordinates must be numeric"
 

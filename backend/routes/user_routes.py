@@ -7,7 +7,7 @@ from flask import Blueprint, request
 from constants import ROLE_ADMIN, ROLE_STUDENT
 from services import auth_service, user_service
 from utils.jwt_utils import current_user, jwt_required, role_required
-from utils.responses import error, success
+from utils.responses import error, maybe_paginated, success
 
 bp = Blueprint("users", __name__, url_prefix="/api/users")
 
@@ -15,14 +15,18 @@ bp = Blueprint("users", __name__, url_prefix="/api/users")
 @bp.get("")
 @role_required(ROLE_ADMIN)
 def list_users():
-    return success(
-        user_service.get_users(
-            search=request.args.get("search", ""),
-            user_type=request.args.get("userType", ""),
-            department=request.args.get("department", ""),
-            role=request.args.get("role", ROLE_STUDENT),
-        )
+    """Account directory.
+
+    Bare array by default (the admin users screen maps over it); the standard
+    paginated envelope when `?page=` / `?pageSize=` is sent.
+    """
+    people = user_service.get_users(
+        search=request.args.get("search", ""),
+        user_type=request.args.get("userType", ""),
+        department=request.args.get("department", ""),
+        role=request.args.get("role", ROLE_STUDENT),
     )
+    return success(maybe_paginated(people, request.args))
 
 
 @bp.get("/summary")

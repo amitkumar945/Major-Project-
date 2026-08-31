@@ -109,7 +109,11 @@ def settings():
 
     Deliberately excludes MONGO_URI and JWT_SECRET_KEY.
     """
+    from config import is_otp_dev_mode
     from constants import ESCALATION_LEVELS, PRIORITY_SLA_DAYS
+
+    def _otp_dev_mode():
+        return is_otp_dev_mode(current_app.config)
 
     return success(
         {
@@ -121,7 +125,10 @@ def settings():
             },
             "otp": {
                 "expirySeconds": current_app.config["OTP_EXPIRY"],
-                "devMode": current_app.config["OTP_DEV_MODE"],
+                # The EFFECTIVE setting, not the raw flag: in production the
+                # flag is ignored, and reporting it here would tell an admin
+                # codes are being returned when they are not.
+                "devMode": _otp_dev_mode(),
                 "requiredForRegister": current_app.config["OTP_REQUIRED_FOR_REGISTER"],
             },
             "ocr": {

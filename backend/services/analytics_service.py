@@ -260,6 +260,11 @@ def key_metrics(items: list) -> dict:
 # ------------------------------------------------------------- entry points
 
 
+def summary(scope: dict = None) -> dict:
+    """Headline numbers for a scope - the dashboard cards and the CSV export."""
+    return key_metrics(_scoped(scope))
+
+
 def dashboard_charts(scope: dict = None) -> dict:
     """The three charts every dashboard shows."""
     items = _scoped(scope)

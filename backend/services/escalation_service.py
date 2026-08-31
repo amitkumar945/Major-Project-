@@ -21,7 +21,6 @@ from utils.helpers import (
     escalation_authority,
     escalation_level_for_overdue,
     iso,
-    uid,
     utcnow,
 )
 
@@ -49,19 +48,23 @@ def sla_status(complaint: dict) -> dict:
 
 def _escalate(complaint: dict, level: int, authority: str, days_overdue: int) -> dict:
     """Move one complaint up the ladder and record it."""
-    entry = {
-        "id": uid("tl"),
-        "key": "escalated",
-        "label": f"Escalated to Level {level}",
-        "description": (
+    # Built by the shared helper so every timeline row in the system has the
+    # same shape, whoever writes it. `state` is overridden afterwards: an
+    # escalation is the stage the complaint is currently sitting at, not a
+    # completed one.
+    from services.complaint_service import _timeline_entry
+
+    entry = _timeline_entry(
+        f"Escalated to Level {level}",
+        (
             f"Resolution deadline exceeded by {days_overdue} day(s); "
             f"the complaint moved to {authority}."
         ),
-        "actor": "SLA Monitor",
-        "at": iso(utcnow()),
-        "state": "current",
-        "variant": "danger",
-    }
+        "SLA Monitor",
+        variant="danger",
+        key="escalated",
+    )
+    entry["state"] = "current"
 
     updated = complaints().find_one_and_update(
         {"id": complaint["id"]},

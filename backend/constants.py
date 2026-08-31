@@ -235,4 +235,53 @@ EXTENSION_KIND = {
 
 UNIVERSITY_SHORT = "DSVV"
 APP_NAME = "Grievance Management System"
-CAMPUS_CENTER = {"latitude": 29.9457, "longitude": 78.1642}
+CAMPUS_CENTER = {"latitude": 29.99965, "longitude": 78.1946}
+
+# The real DSVV campus outline, from OpenStreetMap way/1152422760
+# ("Dev Sanskriti Vishwavidyalaya (DSVV), NH34, Rishikesh, Haridwar").
+# Kept as (latitude, longitude) to match the frontend's CAMPUS_POLYGON; the
+# source GeoJSON uses the opposite order.
+#
+# `validators.point_in_campus()` uses this to reject complaints tagged outside
+# the campus, so the API cannot be used to file a grievance from another city.
+CAMPUS_POLYGON = (
+    (30.0018344, 78.1905549),
+    (29.9997622, 78.1906804),
+    (29.9997529, 78.1909221),
+    (29.9990507, 78.1909547),
+    (29.9990560, 78.1906994),
+    (29.9982475, 78.1907323),
+    (29.9979564, 78.1912310),
+    (29.9973232, 78.1919827),
+    (29.9963837, 78.1931417),
+    (29.9960528, 78.1935266),
+    (29.9976137, 78.1954428),
+    (29.9975361, 78.1955205),
+    (29.9969588, 78.1960770),
+    (29.9967062, 78.1963394),
+    (29.9977739, 78.1974088),
+    (29.9972499, 78.1979616),
+    (29.9979125, 78.1986453),
+    (29.9983217, 78.1980056),
+    (29.9986674, 78.1974636),
+    (29.9990781, 78.1969717),
+    (29.9997395, 78.1959467),
+    (30.0004379, 78.1950392),
+    (30.0010698, 78.1940502),
+    (30.0018910, 78.1929093),
+    (30.0032553, 78.1910827),
+    (30.0029709, 78.1908111),
+    (30.0018757, 78.1909007),
+    (30.0018344, 78.1905549),
+)
+
+# Padded bounding box (~150 m beyond the polygon). A GPS fix just outside the
+# fence - the gate, the road, a wall-side hostel - is still accepted, because
+# consumer GPS drifts by tens of metres and a rejected genuine complaint is
+# worse than a slightly loose boundary.
+CAMPUS_BOUNDS = {
+    "minLatitude": 29.9946,
+    "maxLatitude": 30.0047,
+    "minLongitude": 78.1890,
+    "maxLongitude": 78.2002,
+}

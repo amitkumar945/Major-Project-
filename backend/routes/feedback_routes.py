@@ -13,7 +13,7 @@ from database import complaints, feedback as feedback_collection
 from services import analytics_service
 from utils.helpers import clean_document, to_int
 from utils.jwt_utils import current_user, jwt_required, role_required
-from utils.responses import success
+from utils.responses import maybe_paginated, success
 
 bp = Blueprint("feedback", __name__, url_prefix="/api/feedback")
 
@@ -21,8 +21,12 @@ bp = Blueprint("feedback", __name__, url_prefix="/api/feedback")
 @bp.get("")
 @role_required(ROLE_ADMIN)
 def list_feedback():
-    """Every rating - the analytics page's feedback table."""
-    return success(analytics_service.feedback_entries(limit=to_int(request.args.get("limit"), 200)))
+    """Every rating - the analytics page's feedback table.
+
+    Bare array by default; paginated envelope on `?page=` / `?pageSize=`.
+    """
+    entries = analytics_service.feedback_entries(limit=to_int(request.args.get("limit"), 200))
+    return success(maybe_paginated(entries, request.args))
 
 
 @bp.get("/my")

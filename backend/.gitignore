@@ -3,6 +3,14 @@
 .env.local
 .env.*.local
 
+# Firebase service-account credentials for push notifications. Anyone holding
+# this file can send push messages to every registered device, so it must stay
+# out of the repository - keep it outside the project and point
+# FCM_CREDENTIALS_FILE at it.
+*serviceAccount*.json
+*firebase-adminsdk*.json
+firebase-credentials.json
+
 # Uploaded files (keep the folder, ignore its contents)
 uploads/*
 !uploads/.gitkeep
@@ -44,3 +52,4 @@ desktop.ini
 # Logs
 *.log
 logs/
+.env.bak*

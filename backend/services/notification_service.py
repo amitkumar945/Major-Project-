@@ -6,8 +6,10 @@ notification centre already renders:
 
     { id, recipientId, type, title, message, complaintId, createdAt, read }
 
-Delivery is pluggable: `_deliver()` is where an email or SMS provider hooks in
-later. Today it only logs, so nothing is sent from the prototype.
+Delivery is pluggable: `_deliver()` hands the notification to
+`services.email_service` when MAIL_NOTIFICATIONS_ENABLED is on. Email is
+best-effort - the in-app feed is the source of truth, so a mail failure is
+logged and never breaks the complaint action that triggered it.
 """
 
 import logging
@@ -20,15 +22,89 @@ logger = logging.getLogger(__name__)
 
 
 def _deliver(notification: dict) -> None:
-    """Hook for a future email/SMS provider.
+    """Fan the notification out to email and mobile push.
 
-    Kept deliberately empty: the interface shows what *would* be sent, and the
-    README states that no mail is actually delivered.
+    Best-effort by design: the notification is already stored and visible in the
+    in-app feed, so a mail failure is logged and swallowed rather than rolling
+    back a complaint update. OTP delivery is the opposite - see `otp_service`.
+
+    The two channels are independent. Push is attempted before the mail block
+    returns early, so turning mail off does not silently disable push as well.
     """
     logger.info(
         "Notification %s for %s: %s",
         notification["type"], notification["recipientId"], notification["title"],
     )
+
+    from flask import current_app, has_app_context
+
+    _push(notification)
+
+    if not has_app_context() or not current_app.config.get("MAIL_NOTIFICATIONS_ENABLED"):
+        return
+
+    from services import email_service
+
+    if not email_service.is_configured():
+        return
+
+    recipient = _recipient_email(notification["recipientId"])
+    if not recipient:
+        return
+
+    try:
+        email_service.send_notification_email(
+            recipient,
+            notification["title"],
+            notification["message"],
+            notification.get("complaintId") or "",
+        )
+    except email_service.EmailError as exc:
+        logger.warning(
+            "Notification email to user %s failed (%s): %s",
+            notification["recipientId"], exc.reason, exc.message,
+        )
+    except Exception:
+        logger.exception("Unexpected error while emailing notification %s.", notification["id"])
+
+
+def _push(notification: dict) -> None:
+    """Send the notification to the user's registered mobile devices.
+
+    Silently does nothing when push is not configured, which is the default -
+    so behaviour for the existing web-only deployment is unchanged.
+    """
+    try:
+        from services import push_service
+
+        if not push_service.is_configured():
+            return
+
+        push_service.send_to_user(
+            notification["recipientId"],
+            notification["title"],
+            notification["message"],
+            {
+                "type": notification.get("type", ""),
+                "complaintId": notification.get("complaintId") or "",
+                "notificationId": notification.get("id", ""),
+            },
+        )
+    except Exception:
+        # Never let a push problem escape into the complaint workflow.
+        logger.exception("Unexpected error while pushing notification %s.", notification.get("id"))
+
+
+def _recipient_email(user_id: str) -> str:
+    """Look up a recipient's address, tolerating a missing user."""
+    try:
+        from database import users
+
+        user = users().find_one({"id": user_id}, {"_id": 0, "email": 1})
+        return (user or {}).get("email", "")
+    except Exception:
+        logger.exception("Could not look up the email address for user %s.", user_id)
+        return ""
 
 
 def create(recipient_id: str, type_: str, title: str, message: str, complaint_id: str = None) -> dict:
