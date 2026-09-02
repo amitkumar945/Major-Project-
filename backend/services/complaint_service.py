@@ -10,6 +10,8 @@ Every state change appends a timeline entry (the complaint history the brief
 asks for) and writes an audit log.
 """
 
+import logging
+
 from constants import (
     ACTIVE_STATUSES,
     CLOSED_STATUSES,
@@ -38,6 +40,8 @@ from utils.helpers import (
     utcnow,
 )
 from utils.responses import ApiException
+
+logger = logging.getLogger(__name__)
 
 PROJECTION = {"_id": 0}
 
@@ -229,6 +233,18 @@ def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
     except ApiException:
         # Text too short for analysis: fall back to the submitted values rather
         # than refusing a complaint the validators already accepted.
+        analysis = None
+    except Exception:
+        # Anything else - a bug in a prediction module, an unreachable model
+        # service, a database hiccup while gathering duplicate candidates.
+        # Classification is an enhancement, not a precondition: a citizen must
+        # never lose a grievance because the classifier fell over, so the
+        # complaint is stored with the fallback routing worked out below and
+        # the failure is logged for the operator.
+        logger.exception(
+            "AI analysis failed for a complaint by %s; storing it with fallback routing.",
+            user.get("id", "unknown"),
+        )
         analysis = None
 
     department = (

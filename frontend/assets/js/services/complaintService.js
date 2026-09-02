@@ -17,7 +17,7 @@
  * same object shape the AI card already renders.
  */
 
-import { request, upload } from './mockApi.js'
+import { download, request, upload } from './mockApi.js'
 
 /* --------------------------------------------------------------- queries */
 
@@ -230,4 +230,16 @@ export async function addEvidence(id, files) {
  */
 export async function resetDemoData() {
   return request('/admin/reset-data', { method: 'POST', body: { confirm: true } })
+}
+
+
+/**
+ * Download the complaint list as a CSV file.
+ *
+ * Takes the same filters as `getComplaints`, so the export matches whatever the
+ * table is currently showing. The server scopes the rows to the signed-in user,
+ * so a student only ever receives their own complaints.
+ */
+export async function exportComplaints(filters = {}) {
+  return download('/complaints/export', filters, 'complaints.csv')
 }

@@ -37,6 +37,7 @@ import { aiAnalysisCard } from '../components/aiCard.js'
 import {
   deadlineBanner,
   evidenceGallery,
+  hydrateEvidenceThumbnails,
   hydrateMaps,
   mapPreview,
   officerCard,
@@ -259,16 +260,16 @@ function studentActions(isClosed) {
 
   return html(
     '<section class="card">',
-    '<header class="card__head"><h2 class="card__title">Rate this resolution</h2></header>',
+    '<header class="card__head"><h2 class="card__title">How was your experience?</h2></header>',
     '<div class="card__body">',
     '<form id="feedback-form" class="stack-sm" novalidate>',
     '<div class="field" data-field="rating">',
-    '<span class="field__label">Your rating<span class="field__req">*</span></span>',
+    '<span class="field__label">Tap a star to rate<span class="field__req">*</span></span>',
     `<div id="rating-widget">${starRating(0, { interactive: true })}</div>`,
     '<input type="hidden" name="rating" id="rating-value" value="0">',
     '</div>',
     '<div class="field" data-field="comment">',
-    '<label class="field__label" for="comment">Comments<span class="field__req">*</span></label>',
+    '<label class="field__label" for="comment">Tell us more<span class="field__req">*</span></label>',
     '<textarea class="field__control" id="comment" name="comment" rows="4" placeholder="Was the problem fixed properly? How was the response time?"></textarea>',
     '</div>',
     '<div id="satisfaction" hidden>',
@@ -393,6 +394,9 @@ function draw() {
 
   wire()
   hydrateMaps() // upgrades the location card to Leaflet when it is reachable
+  // Evidence lives behind an authenticated endpoint, so the thumbnails cannot
+  // be plain <img src> - they are fetched with the bearer token instead.
+  hydrateEvidenceThumbnails(qs('#root'))
 }
 
 /* ---------------------------------------------------------- student bits */

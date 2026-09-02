@@ -1,19 +1,31 @@
 # Site images
 
-Drop the two official DSVV assets here. Both are referenced by
-`assets/js/utils/constants.js` (`ASSETS.logo` and `ASSETS.campus`), so no
-other file needs editing — the header, footer, auth pages and the home-page
-hero all pick them up at once.
+The logo is referenced by `assets/js/utils/constants.js` (`ASSETS.logo`), so no
+other file needs editing — the header, footer and auth pages all pick it up at
+once.
 
-Until a file exists, the page renders a clearly marked placeholder in its
-place. Nothing breaks while the slot is empty.
-
-## Expected files
+## Files
 
 | File | Used by | Notes |
 | ---- | ------- | ----- |
-| `dsvv-logo.png` | header, footer, login/register aside | Square-ish crest. A transparent PNG or SVG around 128×128 or larger looks best; it is drawn at 40px. |
-| `campus.jpg` | home-page hero | The official campus photograph. Landscape, ideally 1600×1000 or larger. It is cropped to a 4:3-ish frame, so keep the building roughly centred. |
+| `dsvv-logo.svg` | header, footer, login/register aside | A neutral placeholder emblem, **not** the official DSVV crest. Square, 128×128 viewBox, drawn at 44px. |
+| `campus.svg` | decorative illustration | Simulated campus surface, not a photograph. |
 
-If you use different filenames or formats, update the two paths in
-`assets/js/utils/constants.js`.
+## Using the official crest
+
+Replace `dsvv-logo.svg` with the real artwork and every page updates at once.
+
+If the official file is a PNG (or any other name/format), drop it in here and
+update the path in `assets/js/utils/constants.js`:
+
+```js
+export const ASSETS = {
+  logo: '/assets/img/dsvv-logo.png',
+}
+```
+
+A transparent square image around 128×128 or larger looks best; it is drawn at
+44px.
+
+If the referenced file is ever missing, the `<img>` removes itself and a CSS
+placeholder mark shows through — never a broken-image icon.

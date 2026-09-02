@@ -2,15 +2,27 @@
  * Students & staff directory.
  */
 
-import { esc, icon, mount, on, qs, ready } from '../components/dom.js'
+import {
+  clearErrors,
+  esc,
+  formValues,
+  icon,
+  mount,
+  on,
+  qs,
+  ready,
+  setLoading,
+  showErrors,
+} from '../components/dom.js'
 import { pageHeader, renderShell } from '../components/shell.js'
 import { requireRole } from '../components/session.js'
 import { avatar, errorState, loadingState, statCard } from '../components/ui.js'
 import { activateFilters, filterPanel } from '../components/filters.js'
-import { confirmDialog } from '../components/modal.js'
+import { confirmDialog, openModal } from '../components/modal.js'
 import { toast } from '../components/toast.js'
-import { getUsers, getUserSummary, toggleUserStatus } from '../services/userService.js'
+import { createUser, getUsers, getUserSummary, toggleUserStatus } from '../services/userService.js'
 import { ROLES } from '../utils/constants.js'
+import { isEmail } from '../utils/validators.js'
 import { formatDate } from '../utils/helpers.js'
 
 let users = []
@@ -145,6 +157,90 @@ async function load() {
   }
 }
 
+/** Create a second administrator. Admin-only, and never publicly reachable. */
+function openAdminForm() {
+  const modal = openModal({
+    title: 'Add an administrator',
+    description:
+      'Administrators can see every complaint, manage officers and reassign work. '
+      + 'Create these accounts sparingly.',
+    size: 'lg',
+    body: `
+      <form id="admin-form" novalidate class="stack-sm">
+        <div class="grid grid-2">
+          <div class="field" data-field="fullName">
+            <label class="field__label" for="adm-name">Full name<span class="field__req">*</span></label>
+            <input type="text" class="field__control" id="adm-name" name="fullName" required>
+          </div>
+          <div class="field" data-field="userId">
+            <label class="field__label" for="adm-id">Employee ID<span class="field__req">*</span></label>
+            <input type="text" class="field__control" id="adm-id" name="userId"
+                   placeholder="DSVV/ADM/002" required>
+          </div>
+        </div>
+
+        <div class="field" data-field="email">
+          <label class="field__label" for="adm-email">Email address<span class="field__req">*</span></label>
+          <input type="email" class="field__control" id="adm-email" name="email"
+                 placeholder="name@dsvv.ac.in" required>
+        </div>
+
+        <div class="field" data-field="department">
+          <label class="field__label" for="adm-dep">Office / department<span class="field__req">*</span></label>
+          <input type="text" class="field__control" id="adm-dep" name="department"
+                 value="Office of the Registrar" required>
+        </div>
+
+        <div class="field" data-field="password">
+          <label class="field__label" for="adm-pass">Initial password<span class="field__req">*</span></label>
+          <input type="password" class="field__control" id="adm-pass" name="password"
+                 autocomplete="new-password" placeholder="At least 8 characters" required>
+          <p class="field__hint">
+            Share this securely. They can change it from their profile after signing in.
+          </p>
+        </div>
+      </form>`,
+    footer: `
+      <button type="button" class="btn btn--secondary" data-close>Cancel</button>
+      <button type="button" class="btn btn--primary" data-save>
+        ${icon('check', 'icon-sm')}Create administrator
+      </button>`,
+  })
+
+  on(modal.element, 'click', '[data-save]', async (event, button) => {
+    const form = qs('#admin-form', modal.element)
+    const values = formValues(form)
+
+    clearErrors(form)
+    const errors = {}
+    if (!values.fullName?.trim()) errors.fullName = 'Full name is required'
+    if (!values.userId?.trim()) errors.userId = 'Employee ID is required'
+    if (!values.email?.trim()) errors.email = 'Email is required'
+    else if (!isEmail(values.email)) errors.email = 'Enter a valid email address'
+    if (!values.department?.trim()) errors.department = 'Office or department is required'
+    if (!values.password) errors.password = 'Set an initial password'
+    else if (values.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters'
+    }
+    if (Object.keys(errors).length) {
+      showErrors(form, errors)
+      return
+    }
+
+    setLoading(button, true, 'Creating…')
+    try {
+      await createUser({ ...values, role: ROLES.ADMIN })
+      toast.success(`${values.fullName} can now sign in as an administrator.`, 'Administrator added')
+      modal.close()
+      load()
+    } catch (error) {
+      setLoading(button, false)
+      toast.error(error.message, 'Could not create the account')
+    }
+  })
+}
+
+
 ready(() => {
   const user = requireRole(ROLES.ADMIN)
   if (!user) return
@@ -156,10 +252,17 @@ ready(() => {
       title: 'Students & staff',
       lead: 'Every account that can register a complaint on the portal.',
       crumbs: [{ label: 'Dashboard', href: '/admin/dashboard.html' }, { label: 'Students & Staff' }],
+      actions: `<button type="button" class="btn btn--primary" data-add-admin>
+        ${icon('shield-check', 'icon-sm')}Add administrator
+      </button>`,
     })}
     <div id="area"></div>`
 
   load()
+
+  // An administrator account cannot be self-registered, so this is the only
+  // place one is created. The server re-checks the caller is an admin.
+  on('#root', 'click', '[data-add-admin]', () => openAdminForm())
 
   on('#area', 'click', '[data-toggle]', async (event, button) => {
     const target = users.find((item) => item.id === button.dataset.toggle)

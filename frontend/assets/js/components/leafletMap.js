@@ -8,7 +8,7 @@
  */
 
 import { esc } from './dom.js'
-import { CAMPUS_CENTER } from '../utils/constants.js'
+import { CAMPUS_BOUNDS, CAMPUS_CENTER, CAMPUS_POLYGON, CAMPUS_ZOOM } from '../utils/constants.js'
 
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
 const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
@@ -25,6 +25,47 @@ const PRIORITY_COLORS = {
 }
 
 let loader = null
+
+/**
+ * Options every map on the site shares, so none of them can wander off campus.
+ *
+ * `maxBounds` keeps panning inside the padded campus box and
+ * `maxBoundsViscosity: 1.0` makes that edge solid rather than elastic, while
+ * `minZoom` stops the user from zooming out to the district, the state or the
+ * whole of India. This is a campus grievance system: nothing outside the fence
+ * is ever a valid view.
+ */
+function campusMapOptions(L) {
+  return {
+    maxBounds: L.latLngBounds(
+      [CAMPUS_BOUNDS.minLatitude, CAMPUS_BOUNDS.minLongitude],
+      [CAMPUS_BOUNDS.maxLatitude, CAMPUS_BOUNDS.maxLongitude],
+    ),
+    maxBoundsViscosity: 1.0,
+    minZoom: CAMPUS_ZOOM.min,
+    maxZoom: CAMPUS_ZOOM.max,
+  }
+}
+
+/**
+ * Draw the real campus outline (OSM way/1152422760) so the viewer can see what
+ * counts as "on campus". Purely decorative - a failure here must not take the
+ * map down with it.
+ */
+function addCampusBoundary(L, map) {
+  try {
+    return L.polygon(CAMPUS_POLYGON, {
+      color: '#4f46e5',
+      weight: 2,
+      opacity: 0.65,
+      fillColor: '#4f46e5',
+      fillOpacity: 0.05,
+      interactive: false,
+    }).addTo(map)
+  } catch {
+    return null
+  }
+}
 
 /**
  * Load Leaflet once and share the promise. Resolves with `L`, or rejects when
@@ -83,6 +124,32 @@ function hasPoint(location) {
 }
 
 /**
+ * Is this point actually on campus?
+ *
+ * `maxBounds` constrains panning, but `fitBounds()` ignores it entirely - it
+ * frames whatever markers it is given. Older complaints stored before the
+ * campus check existed can sit anywhere on earth, and a single such pin drags
+ * the view out to the country or the globe. Framing is therefore restricted to
+ * points that fall inside the padded campus box.
+ *
+ * The pin itself is still drawn: this decides what the map zooms to, never
+ * what it shows.
+ */
+function isOnCampus(location) {
+  if (!hasPoint(location)) return false
+  const latitude = Number(location.latitude)
+  const longitude = Number(location.longitude)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return false
+
+  return (
+    latitude >= CAMPUS_BOUNDS.minLatitude &&
+    latitude <= CAMPUS_BOUNDS.maxLatitude &&
+    longitude >= CAMPUS_BOUNDS.minLongitude &&
+    longitude <= CAMPUS_BOUNDS.maxLongitude
+  )
+}
+
+/**
  * Render a single complaint location.
  *
  * @param {HTMLElement} node        container to render into
@@ -90,7 +157,7 @@ function hasPoint(location) {
  * @param {object}      options     { zoom, interactive, onFail }
  * @returns {Promise<object|null>}  the Leaflet map, or null when unavailable
  */
-export async function renderLocationMap(node, location, { zoom = 17, interactive = true, onFail } = {}) {
+export async function renderLocationMap(node, location, { zoom = CAMPUS_ZOOM.point, interactive = true, onFail } = {}) {
   if (!node || !hasPoint(location)) return null
 
   let L
@@ -107,8 +174,15 @@ export async function renderLocationMap(node, location, { zoom = 17, interactive
 
   try {
     const point = [Number(location.latitude), Number(location.longitude)]
+    // Centre on the complaint only when it is on campus. A point stored before
+    // the campus check existed would otherwise open the map outside `maxBounds`
+    // - the map immediately fights back to the boundary, which is the "wrong
+    // place / zoomed out" view. The DSVV centre is the safe fallback.
+    const onCampus = isOnCampus(location)
+    const centre = onCampus ? point : [CAMPUS_CENTER.latitude, CAMPUS_CENTER.longitude]
     const map = L.map(node, {
-      center: point,
+      ...campusMapOptions(L),
+      center: centre,
       zoom,
       scrollWheelZoom: false, // page scrolling wins until the user clicks in
       dragging: interactive,
@@ -116,21 +190,29 @@ export async function renderLocationMap(node, location, { zoom = 17, interactive
       attributionControl: true,
     })
 
-    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map)
+    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: CAMPUS_ZOOM.max }).addTo(map)
+    addCampusBoundary(L, map)
 
-    // The GPS accuracy radius, drawn only when the device reported one.
-    if (location.accuracy) {
-      L.circle(point, {
-        radius: Number(location.accuracy),
-        color: '#4f46e5',
-        weight: 1,
-        fillColor: '#4f46e5',
-        fillOpacity: 0.15,
-      }).addTo(map)
+    // The pin and its accuracy ring are drawn only for a point that is really
+    // on campus. An older complaint stored before the campus check existed can
+    // sit hundreds or thousands of kilometres away; drawing it there would put
+    // the marker outside every view `maxBounds` allows, leaving what looks like
+    // an empty map. The complaint itself is untouched and still shows its
+    // stored coordinates in the details panel beside this map.
+    if (onCampus) {
+      if (location.accuracy) {
+        L.circle(point, {
+          radius: Number(location.accuracy),
+          color: '#4f46e5',
+          weight: 1,
+          fillColor: '#4f46e5',
+          fillOpacity: 0.15,
+        }).addTo(map)
+      }
+
+      const marker = L.marker(point, { icon: pinIcon(L, PRIORITY_COLORS.Critical) }).addTo(map)
+      if (location.address) marker.bindPopup(`<strong>${esc(location.address)}</strong>`)
     }
-
-    const marker = L.marker(point, { icon: pinIcon(L, PRIORITY_COLORS.Critical) }).addTo(map)
-    if (location.address) marker.bindPopup(`<strong>${esc(location.address)}</strong>`)
 
     // Leaflet mis-sizes tiles inside cards that animate or start hidden.
     setTimeout(() => map.invalidateSize(), 0)
@@ -155,7 +237,15 @@ export async function renderLocationMap(node, location, { zoom = 17, interactive
 export async function renderComplaintsMap(node, complaints = [], { onSelect, onFail } = {}) {
   if (!node) return null
 
-  const tagged = complaints.filter((complaint) => hasPoint(complaint.location))
+  // Only complaints that are actually on campus get a pin. Leaflet's
+  // `maxBounds` limits panning, not rendering, so a marker stored thousands of
+  // kilometres away is still drawn - it just sits outside every reachable view,
+  // which is what made the map look wrong. Filtering here means such a marker
+  // is never created in the first place.
+  //
+  // This changes DISPLAY ONLY: the complaint keeps its stored coordinates and
+  // stays fully visible in the lists, tables and its own details page.
+  const tagged = complaints.filter((complaint) => isOnCampus(complaint.location))
 
   let L
   try {
@@ -170,12 +260,14 @@ export async function renderComplaintsMap(node, complaints = [], { onSelect, onF
 
   try {
     const map = L.map(node, {
+      ...campusMapOptions(L),
       center: [CAMPUS_CENTER.latitude, CAMPUS_CENTER.longitude],
-      zoom: 16,
+      zoom: CAMPUS_ZOOM.default,
       scrollWheelZoom: false,
     })
 
-    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: 19 }).addTo(map)
+    L.tileLayer(TILE_URL, { attribution: TILE_ATTRIBUTION, maxZoom: CAMPUS_ZOOM.max }).addTo(map)
+    addCampusBoundary(L, map)
 
     const markers = tagged.map((complaint) => {
       const { latitude, longitude, address } = complaint.location
@@ -192,14 +284,27 @@ export async function renderComplaintsMap(node, complaints = [], { onSelect, onF
       )
 
       if (onSelect) marker.on('click', () => onSelect(complaint))
+      // Re-checked rather than assumed, so the framing guard below stays a
+      // genuine second check instead of trusting the filter above.
+      marker._campusPoint = isOnCampus(complaint.location)
       return marker
     })
 
-    // Frame every pin; a lone pin would otherwise zoom to maximum.
-    if (markers.length > 1) {
-      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2))
-    } else if (markers.length === 1) {
-      map.setView(markers[0].getLatLng(), 17)
+    // Frame the pins. `markers` only ever holds on-campus points now, because
+    // `tagged` was filtered above - but the guard is kept anyway: `fitBounds`
+    // overrides `maxBounds`, so a single stray point reaching this line would
+    // pull the view out to the country or the globe. Two independent checks
+    // are cheap; one silent regression here is not.
+    //
+    // `maxZoom` keeps a tight cluster from zooming past the campus, and with
+    // no valid pins at all nothing is called, so the map simply keeps the DSVV
+    // centre and campus zoom it opened with.
+    const framing = markers.filter((marker) => marker._campusPoint)
+
+    if (framing.length > 1) {
+      map.fitBounds(L.featureGroup(framing).getBounds().pad(0.2), { maxZoom: CAMPUS_ZOOM.point })
+    } else if (framing.length === 1) {
+      map.setView(framing[0].getLatLng(), CAMPUS_ZOOM.point)
     }
 
     setTimeout(() => map.invalidateSize(), 0)
@@ -213,4 +318,4 @@ export async function renderComplaintsMap(node, complaints = [], { onSelect, onF
   }
 }
 
-export default { loadLeaflet, renderLocationMap, renderComplaintsMap }
+export default { loadLeaflet, renderLocationMap, renderComplaintsMap, addCampusBoundary }

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="DSVV placeholder emblem">
+  <title>DSVV placeholder emblem</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7a733"/>
+      <stop offset="1" stop-color="#e2762b"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#g)"/>
+  <circle cx="64" cy="64" r="52" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="2.5"/>
+  <text x="64" y="60" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="30" font-weight="700" fill="#fff" letter-spacing="1">DSVV</text>
+  <text x="64" y="82" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="10.5" fill="#fff" fill-opacity=".9" letter-spacing="1.5">HARIDWAR</text>
+</svg>

@@ -14,37 +14,37 @@ export const TIMELINE_STAGES = [
   {
     key: 'submitted',
     label: 'Complaint Submitted',
-    description: 'Grievance registered on the portal and reference number generated.',
+    description: 'We received your complaint and gave it a reference number.',
   },
   {
     key: 'classified',
-    label: 'AI Classified',
-    description: 'Department, priority and duplicate probability predicted automatically.',
+    label: 'Under Review',
+    description: 'We checked your complaint and worked out which department should handle it.',
   },
   {
     key: 'department',
-    label: 'Assigned to Department',
-    description: 'Routed to the responsible department for action.',
+    label: 'Sent to Department',
+    description: 'Your complaint reached the department that can fix it.',
   },
   {
     key: 'officer',
     label: 'Officer Assigned',
-    description: 'A department officer took ownership of the complaint.',
+    description: 'An officer from that department is now responsible for it.',
   },
   {
     key: 'started',
     label: 'Work Started',
-    description: 'Field work or repair has begun on site.',
+    description: 'The repair work has begun.',
   },
   {
     key: 'resolution',
-    label: 'Resolution Submitted',
-    description: 'Officer submitted the resolution report and proof of work.',
+    label: 'Work Finished',
+    description: 'The officer finished the work and sent in a report.',
   },
   {
     key: 'resolved',
     label: 'Resolved',
-    description: 'Complaint closed and the complainant notified for feedback.',
+    description: 'Your complaint is closed. You can now rate how it went.',
   },
 ]
 

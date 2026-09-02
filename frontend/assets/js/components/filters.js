@@ -20,9 +20,21 @@ export function filterPanel({
   showDates = true,
   placeholder = 'Search by ID, title or description…',
 }) {
-  const active = Object.entries(filters).filter(
-    ([key, value]) => key !== 'search' && key !== 'page' && key !== 'pageSize' && value,
-  ).length
+  // Only the controls this panel actually draws can count as an applied
+  // filter. Deriving the list from `fields`/`showDates` keeps sorting, paging
+  // and any other state the page happens to carry in `filters` out of the
+  // tally -- an allow-list, so new bookkeeping keys can never inflate it.
+  const countedKeys = [
+    ...fields.map((field) => field.name),
+    ...(showDates ? ['dateFrom', 'dateTo'] : []),
+  ]
+
+  // A dropdown left on its "All ..." option has an empty value, and an
+  // untouched date input is an empty string, so both fall out here.
+  const active = countedKeys.filter((key) => {
+    const value = filters[key]
+    return typeof value === 'string' ? value.trim() !== '' : Boolean(value)
+  }).length
 
   const selects = fields
     .map(
@@ -119,15 +131,18 @@ export function activateFilters(scope, filters, onChange) {
 
   on(panel, 'click', '[data-clear-search]', () => onChange({ ...filters, search: '', page: 1 }))
 
-  on(panel, 'click', '[data-reset-filters]', () =>
-    onChange({
-      search: filters.search ?? '',
-      page: 1,
-      pageSize: filters.pageSize ?? 10,
-      sortBy: filters.sortBy,
-      sortDir: filters.sortDir,
-    }),
-  )
+  /* Reset every filter control back to its empty default while leaving the
+     search box, sorting and page size alone. Blanking the keys in place --
+     rather than dropping them -- keeps the filter object the same shape it
+     started with, so later spreads and the query-string sync still see every
+     field. */
+  on(panel, 'click', '[data-reset-filters]', () => {
+    const cleared = { ...filters }
+    qsa('[data-filter]', panel).forEach((control) => {
+      if (control.dataset.filter !== 'search') cleared[control.dataset.filter] = ''
+    })
+    onChange({ ...cleared, page: 1 })
+  })
 }
 
 /**

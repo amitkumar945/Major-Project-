@@ -45,11 +45,11 @@ import { isValid, validateComplaintDetails, validateLocation } from '../utils/va
 const DETAILS = '/student/complaint-details.html'
 
 const STEPS = [
-  { key: 'details', label: 'Complaint Details' },
-  { key: 'evidence', label: 'Upload Evidence' },
-  { key: 'location', label: 'Location' },
-  { key: 'ai', label: 'AI Analysis' },
-  { key: 'review', label: 'Review & Submit' },
+  { key: 'details',  label: 'Details',  hint: 'Tell us what the problem is.' },
+  { key: 'evidence', label: 'Photo',    hint: 'Add a photo if you have one. You can skip this.' },
+  { key: 'location', label: 'Location', hint: 'Where on campus is the problem?' },
+  { key: 'ai',       label: 'Check',    hint: 'We find the right department for you automatically.' },
+  { key: 'review',   label: 'Review',   hint: 'Check everything once, then send it.' },
 ]
 
 /* ------------------------------------------------------------- the draft */
@@ -64,6 +64,9 @@ const draft = {
   ai: null,
   duplicates: [],
   duplicatesAcknowledged: false,
+  // True once the user opens the panel and picks a department by hand, so the
+  // category no longer overwrites their choice and the panel stays open.
+  departmentTouched: false,
 }
 
 let step = 0
@@ -85,8 +88,14 @@ function stepper() {
   ).join('')
 
   const percent = (step / (STEPS.length - 1)) * 100
+  const current = STEPS[step]
 
   return `
+    <div class="step-count">
+      <span class="step-count__now">${esc(current.label)}</span>
+      <span class="step-count__of">Step ${step + 1} of ${STEPS.length}</span>
+    </div>
+    <p class="step-hint">${esc(current.hint)}</p>
     <ol class="stepper scroll-slim" aria-label="Complaint submission steps">${items}</ol>
     <div class="stepper-rail"><div class="stepper-rail__fill" style="width:${percent}%"></div></div>`
 }
@@ -97,45 +106,56 @@ function detailsStep() {
   return `
     <form id="details-form" novalidate class="stack">
       <div class="field" data-field="title">
-        <label class="field__label" for="title">Complaint title<span class="field__req">*</span></label>
+        <label class="field__label" for="title">What is the problem?<span class="field__req">*</span></label>
         <input type="text" class="field__control" id="title" name="title" maxlength="120"
                value="${esc(draft.title)}" placeholder="e.g. Water leakage near Gayatri Bhavan entrance" required>
-        <p class="field__hint">A short line that describes the problem.</p>
+        <p class="field__hint">One short line describing the problem.</p>
       </div>
 
       <div class="field" data-field="description">
-        <label class="field__label" for="description">Description<span class="field__req">*</span></label>
+        <label class="field__label" for="description">Describe your problem<span class="field__req">*</span></label>
         <textarea class="field__control" id="description" name="description" rows="6" maxlength="1200"
-                  placeholder="Describe what is wrong, since when, and how it is affecting you." required>${esc(draft.description)}</textarea>
+                  placeholder="What is wrong? Since when? How is it affecting you?" required>${esc(draft.description)}</textarea>
         <p class="field__hint">
-          At least 25 characters. The more detail you give, the more accurately the system can route
-          your complaint.
+          Please write at least 25 characters. More detail helps us send it to the right people.
         </p>
       </div>
 
-      <div class="grid grid-2">
-        <div class="field" data-field="category">
-          <label class="field__label" for="category">Category<span class="field__req">*</span></label>
-          <select class="field__control" id="category" name="category" required>
-            <option value="">Select a category</option>
-            ${CATEGORIES.map(
-              (category) =>
-                `<option value="${esc(category)}" ${draft.category === category ? 'selected' : ''}>${esc(category)}</option>`,
-            ).join('')}
-          </select>
-        </div>
+      <div class="field" data-field="category">
+        <label class="field__label" for="category">What type of problem is it?<span class="field__req">*</span></label>
+        <select class="field__control" id="category" name="category" required>
+          <option value="">Choose one</option>
+          ${CATEGORIES.map(
+            (category) =>
+              `<option value="${esc(category)}" ${draft.category === category ? 'selected' : ''}>${esc(category)}</option>`,
+          ).join('')}
+        </select>
+      </div>
 
-        <div class="field" data-field="department">
-          <label class="field__label" for="department">Department<span class="field__req">*</span></label>
-          <select class="field__control" id="department" name="department" required>
-            <option value="">Select a department</option>
-            ${DEPARTMENT_NAMES.map(
-              (name) =>
-                `<option value="${esc(name)}" ${draft.department === name ? 'selected' : ''}>${esc(name)}</option>`,
-            ).join('')}
-          </select>
-          <p class="field__hint">Not sure? Pick the closest one — the AI step can correct it.</p>
-        </div>
+      <!-- Department is still a real, required field submitted to the API exactly
+           as before. It is filled in from the category and confirmed by the
+           automatic check, so a student never has to know the department names.
+           Anyone who wants to set it themselves can still open this panel. -->
+      <div class="field" data-field="department">
+        <p class="auto-note">
+          ${icon('sparkles', 'icon-sm')}
+          <span>You don't need to choose a department — we identify it for you.</span>
+        </p>
+
+        <details class="mini-disclosure" ${draft.departmentTouched ? 'open' : ''}>
+          <summary class="mini-disclosure__summary">Choose the department myself</summary>
+          <div class="mini-disclosure__body">
+            <label class="field__label" for="department">Department</label>
+            <select class="field__control" id="department" name="department" required>
+              <option value="">Choose one</option>
+              ${DEPARTMENT_NAMES.map(
+                (name) =>
+                  `<option value="${esc(name)}" ${draft.department === name ? 'selected' : ''}>${esc(name)}</option>`,
+              ).join('')}
+            </select>
+            <p class="field__hint">Not sure? Leave it — the automatic check will set it.</p>
+          </div>
+        </details>
       </div>
     </form>`
 }
@@ -146,10 +166,10 @@ function evidenceStep() {
       <div class="alert alert--muted">
         <span class="alert__icon">${icon('info', 'icon-lg')}</span>
         <div class="grow">
-          <p class="alert__title">Photographs help a lot</p>
+          <p class="alert__title">A photo helps a lot</p>
           <p class="alert__text">
-            A clear picture of the problem lets the officer bring the right tools on the first visit.
-            This step is optional, but recommended.
+            A clear picture helps the officer bring the right tools the first time.
+            You can skip this step if you do not have one.
           </p>
         </div>
       </div>
@@ -177,32 +197,32 @@ function reviewStep() {
             `<li class="row" style="gap:.5rem">${icon('paperclip', 'icon-sm')}<span class="truncate">${esc(file.name)}</span><span class="muted">${esc(formatFileSize(file.size))}</span></li>`,
         )
         .join('')
-    : '<li class="muted">No files attached</li>'
+    : '<li class="muted">No photos added</li>'
 
   return `
     <div class="stack">
       <div class="alert alert--info">
         <span class="alert__icon">${icon('info', 'icon-lg')}</span>
         <div class="grow">
-          <p class="alert__title">Please check the details before submitting</p>
+          <p class="alert__title">Almost done — please check your details</p>
           <p class="alert__text">
-            Once submitted, the complaint is sent to the department immediately and a reference
-            number is generated.
+            When you submit, your complaint goes straight to the department and you get a
+            reference number to track it with.
           </p>
         </div>
       </div>
 
       <section class="card">
-        <header class="card__head"><h2 class="card__title">Complaint summary</h2></header>
+        <header class="card__head"><h2 class="card__title">Your complaint</h2></header>
         <div class="card__body">
           <div class="info-list">
-            ${infoRow('Title', esc(draft.title))}
-            ${infoRow('Description', esc(draft.description))}
+            ${infoRow('Problem', esc(draft.title))}
+            ${infoRow('Details', esc(draft.description))}
             ${infoRow('Category', esc(draft.category))}
             ${infoRow('Department', esc(draft.ai?.department ?? draft.department))}
             ${infoRow('Priority', draft.ai ? priorityBadge(draft.ai.priority) : '<span class="muted">Will be set on submission</span>')}
             ${infoRow('Location', esc(draft.location.address || '—'))}
-            ${infoRow('Evidence', `<ul class="stack-sm" style="gap:.25rem">${files}</ul>`)}
+            ${infoRow('Photos', `<ul class="stack-sm" style="gap:.25rem">${files}</ul>`)}
           </div>
         </div>
       </section>
@@ -225,14 +245,14 @@ function render() {
   qs('#form-card').innerHTML = `
     ${stepper()}
     <div class="card__body" id="step-body">${RENDERERS[step]()}</div>
-    <footer class="card__foot" style="display:flex;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap">
-      <button type="button" class="btn btn--secondary" data-back ${step === 0 ? 'disabled' : ''}>
+    <footer class="card__foot step-nav">
+      <button type="button" class="btn btn--secondary btn--lg" data-back ${step === 0 ? 'disabled' : ''}>
         ${icon('arrow-left', 'icon-sm')}Back
       </button>
       ${
         step === STEPS.length - 1
-          ? `<button type="button" class="btn btn--success btn--lg" data-submit>${icon('send', 'icon-md')}Submit complaint</button>`
-          : `<button type="button" class="btn btn--primary" data-next>Continue${icon('arrow-right', 'icon-sm')}</button>`
+          ? `<button type="button" class="btn btn--success btn--lg" data-submit>${icon('send', 'icon-md')}Submit Complaint</button>`
+          : `<button type="button" class="btn btn--primary btn--lg" data-next>Continue${icon('arrow-right', 'icon-sm')}</button>`
       }
     </footer>`
 
@@ -269,13 +289,20 @@ function render() {
   // The review step shows a read-only map of the captured point.
   if (step === 4) hydrateMaps(qs('#step-body'))
 
-  // Category picks a sensible default department.
+  // The category fills the department in automatically, so the student never
+  // has to pick one. It stops overwriting as soon as they choose their own.
   if (step === 0) {
     on('#details-form', 'change', '#category', (event) => {
       const departmentSelect = qs('#department')
-      if (!departmentSelect.value) {
+      if (!draft.departmentTouched) {
         departmentSelect.value = CATEGORY_DEPARTMENT_MAP[event.target.value] ?? ''
+        draft.department = departmentSelect.value
       }
+    })
+
+    on('#details-form', 'change', '#department', (event) => {
+      draft.departmentTouched = true
+      draft.department = event.target.value
     })
   }
 }
@@ -291,6 +318,13 @@ function captureStep() {
       draft.description = qs('#description', form).value.trim()
       draft.category = qs('#category', form).value
       draft.department = qs('#department', form).value
+
+      // The department select lives inside a collapsed panel, so a student who
+      // never opens it would otherwise leave this required field empty. Fall
+      // back to the category's mapping; the automatic check confirms it later.
+      if (!draft.department && draft.category) {
+        draft.department = CATEGORY_DEPARTMENT_MAP[draft.category] ?? ''
+      }
     }
   }
   if (step === 1 && uploader) draft.evidence = uploader.files()
@@ -313,13 +347,13 @@ function validateStep() {
     const errors = validateLocation(draft.location)
     if (!isValid(errors)) {
       picker.setErrors(errors)
-      toast.warning('Please capture the location and add a landmark.', 'Location required')
+      toast.warning('Please mark where the problem is and name a nearby landmark.', 'Location needed')
       return false
     }
   }
 
   if (step === 3 && !draft.ai) {
-    toast.warning('Run the AI analysis so your complaint reaches the right department.', 'One step left')
+    toast.warning('Tap "Start check" so we can send this to the right department.', 'One thing left')
     return false
   }
 
@@ -364,10 +398,10 @@ function successView(complaint) {
     <div class="card anim-up" style="max-width:36rem;margin-inline:auto;text-align:center;padding:var(--sp-10) var(--sp-6)">
       <span class="success-mark">${icon('check-circle', 'icon-xl')}</span>
 
-      <h1 style="font-size:var(--fs-xl);margin-top:var(--sp-5)">Complaint submitted successfully</h1>
-      <p class="muted" style="margin-top:.5rem">
-        Your complaint has been registered and sent to the department. Please note the reference
-        number below.
+      <h1 style="font-size:var(--fs-2xl);margin-top:var(--sp-5)">Thank you — we have got it</h1>
+      <p class="muted" style="margin-top:.5rem;font-size:var(--fs-md)">
+        Your complaint is registered and on its way to the department.
+        Keep this reference number safe — you can track your complaint with it.
       </p>
 
       <p class="reference" style="margin-top:var(--sp-6)">
@@ -377,9 +411,9 @@ function successView(complaint) {
       <div class="info-list" style="margin-top:var(--sp-6);text-align:left">
         ${infoRow('Department', esc(complaint.department))}
         ${infoRow('Priority', priorityBadge(complaint.priority))}
-        ${infoRow('Expected resolution', esc(formatDate(complaint.deadline)))}
+        ${infoRow('Expected by', esc(formatDate(complaint.deadline)))}
         ${infoRow(
-          'Assigned officer',
+          'Officer',
           complaint.assignedOfficer
             ? esc(complaint.assignedOfficer.name)
             : '<span class="muted">Will be assigned shortly</span>',
@@ -388,9 +422,9 @@ function successView(complaint) {
 
       <div class="row-wrap" style="justify-content:center;margin-top:var(--sp-8)">
         <a class="btn btn--primary btn--lg" href="${DETAILS}?id=${encodeURIComponent(complaint.id)}">
-          ${icon('file-search', 'icon-md')}Track this complaint
+          ${icon('file-search', 'icon-md')}Track my complaint
         </a>
-        <a class="btn btn--secondary btn--lg" href="/student/dashboard.html">Back to dashboard</a>
+        <a class="btn btn--secondary btn--lg" href="/student/dashboard.html">Go to home</a>
       </div>
     </div>`
 }
@@ -424,15 +458,15 @@ ready(() => {
   user = requireRole(ROLES.STUDENT)
   if (!user) return
 
-  renderShell(user, { title: 'Submit Complaint' })
+  renderShell(user, { title: 'Submit a Complaint' })
 
   qs('#root').innerHTML = `
     ${pageHeader({
-      title: 'Submit a complaint',
-      lead: 'Five short steps. Your complaint reaches the right department automatically.',
+      title: 'Submit a Complaint',
+      lead: 'Five short steps. We send it to the right department for you.',
       crumbs: [
         { label: 'Dashboard', href: '/student/dashboard.html' },
-        { label: 'Submit Complaint' },
+        { label: 'Submit a Complaint' },
       ],
     })}
     <section class="card" id="form-card"></section>`
@@ -459,7 +493,7 @@ ready(() => {
   on(root, 'click', '[data-run-ai]', () => {
     captureStep()
     if (!draft.title || draft.description.length < 25) {
-      toast.warning('Go back to step 1 and complete the title and description first.', 'Not enough detail')
+      toast.warning('Go back to step 1 and fill in the problem and the details first.', 'Not enough detail yet')
       return
     }
     runAnalysis()
@@ -469,7 +503,7 @@ ready(() => {
     draft.duplicatesAcknowledged = true
     draft.duplicates = []
     render()
-    toast.info('You can continue with your own complaint.', 'Duplicate check dismissed')
+    toast.info('You can carry on with your own complaint.', 'Thanks for checking')
   })
 
   on(root, 'click', '[data-submit]', (event, button) => submit(button))

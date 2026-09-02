@@ -3,8 +3,8 @@
  * Summary counters, quick actions, three charts and the most recent complaints.
  */
 
-import { icon, mount, qs, ready } from '../components/dom.js'
-import { renderShell, pageHeader } from '../components/shell.js'
+import { esc, icon, mount, qs, ready } from '../components/dom.js'
+import { renderShell } from '../components/shell.js'
 import { requireRole } from '../components/session.js'
 import { errorState, skeletonCards, statCard } from '../components/ui.js'
 import { complaintTable } from '../components/complaintTable.js'
@@ -16,44 +16,41 @@ import { ROLES } from '../utils/constants.js'
 
 const DETAILS = '/student/complaint-details.html'
 
+/**
+ * The greeting and the one primary action, then four plain quick links.
+ * Everything here is navigation only - no data is fetched or changed.
+ */
+function welcome(user) {
+  return `
+    <section class="welcome">
+      <p class="welcome__hello">Hello, ${esc(user.name.split(' ')[0])}!</p>
+      <h1 class="welcome__ask">How can we help you today?</h1>
+      <a class="btn btn--lg welcome__cta" href="/student/new-complaint.html">
+        ${icon('plus', 'icon-md')}Submit a Complaint
+      </a>
+    </section>`
+}
+
 function quickActions() {
   const actions = [
-    {
-      label: 'Submit a new complaint',
-      description: 'Report a problem in under two minutes',
-      glyph: 'file-plus',
-      href: '/student/new-complaint.html',
-    },
-    {
-      label: 'Track a complaint',
-      description: 'Look up any complaint by reference number',
-      glyph: 'file-search',
-      href: '/track.html',
-    },
-    {
-      label: 'View notifications',
-      description: 'Status updates on your complaints',
-      glyph: 'bell',
-      href: '/student/notifications.html',
-    },
+    { label: 'My Complaints',  glyph: 'clipboard-list', href: '/student/complaints.html' },
+    { label: 'Track Complaint', glyph: 'file-search',   href: '/track.html' },
+    { label: 'Notifications',  glyph: 'bell',           href: '/student/notifications.html' },
+    { label: 'Help & Support', glyph: 'life-buoy',      href: '/student/help.html' },
   ]
 
   return `
-    <div class="grid grid-3">
+    <nav class="quick-grid" aria-label="Quick actions">
       ${actions
         .map(
           (action) => `
-        <a class="card card--hover" href="${action.href}"
-           style="display:flex;gap:.875rem;align-items:center;padding:var(--sp-4)">
-          <span class="card__icon" style="width:2.75rem;height:2.75rem">${icon(action.glyph, 'icon-lg')}</span>
-          <span class="grow">
-            <span class="strong" style="display:block">${action.label}</span>
-            <span class="muted" style="font-size:var(--fs-xs)">${action.description}</span>
-          </span>
+        <a class="card card--hover quick-tile" href="${action.href}">
+          <span class="quick-tile__icon">${icon(action.glyph, 'icon-lg')}</span>
+          <span class="quick-tile__label">${action.label}</span>
         </a>`,
         )
         .join('')}
-    </div>`
+    </nav>`
 }
 
 /** Build the three dashboard charts from this user's complaints. */
@@ -117,12 +114,7 @@ function charts(complaints, byDepartment, byPriority) {
 async function load(user) {
   const root = qs('#root')
 
-  root.innerHTML =
-    pageHeader({
-      title: `Welcome back, ${user.name.split(' ')[0]}`,
-      lead: 'Here is what is happening with the complaints you have registered.',
-      actions: `<a class="btn btn--primary" href="/student/new-complaint.html">${icon('plus', 'icon-sm')}New complaint</a>`,
-    }) + skeletonCards(5)
+  root.innerHTML = welcome(user) + quickActions() + skeletonCards(3)
 
   try {
     const [summary, chartData, recent] = await Promise.all([
@@ -132,29 +124,17 @@ async function load(user) {
     ])
 
     root.innerHTML = `
-      ${pageHeader({
-        title: `Welcome back, ${user.name.split(' ')[0]}`,
-        lead: 'Here is what is happening with the complaints you have registered.',
-        actions: `<a class="btn btn--primary" href="/student/new-complaint.html">${icon('plus', 'icon-sm')}New complaint</a>`,
-      })}
+      ${welcome(user)}
+      ${quickActions()}
 
       <div class="stack">
-        <div class="grid grid-4">
-          ${statCard({ label: 'Total Complaints', value: summary.total, icon: 'clipboard-list', href: '/student/complaints.html' })}
-          ${statCard({ label: 'Pending', value: summary.pending, icon: 'clock', tone: 'warning', href: '/student/complaints.html?status=Pending' })}
-          ${statCard({ label: 'In Progress', value: summary.inProgress, icon: 'activity', tone: 'info', href: '/student/complaints.html?status=In+Progress' })}
-          ${statCard({ label: 'Resolved', value: summary.resolved, icon: 'check-circle', tone: 'success', href: '/student/complaints.html?status=Resolved' })}
-          ${statCard({ label: 'Reopened', value: summary.reopened, icon: 'rotate-ccw', tone: 'purple', href: '/student/complaints.html?status=Reopened' })}
-        </div>
-
         <section>
-          <h2 class="card__title" style="margin-bottom:var(--sp-3)">Quick actions</h2>
-          ${quickActions()}
-        </section>
-
-        <section>
-          <h2 class="card__title" style="margin-bottom:var(--sp-3)">Complaint statistics</h2>
-          ${charts(recent, chartData.byDepartment, chartData.byPriority)}
+          <h2 class="section-label">Your complaints</h2>
+          <div class="grid grid-3">
+            ${statCard({ label: 'Pending', value: summary.pending, icon: 'clock', tone: 'warning', href: '/student/complaints.html?status=Pending' })}
+            ${statCard({ label: 'In Progress', value: summary.inProgress, icon: 'activity', tone: 'info', href: '/student/complaints.html?status=In+Progress' })}
+            ${statCard({ label: 'Resolved', value: summary.resolved, icon: 'check-circle', tone: 'success', href: '/student/complaints.html?status=Resolved' })}
+          </div>
         </section>
 
         <section class="card">
@@ -176,6 +156,27 @@ async function load(user) {
             })}
           </div>
         </section>
+
+        <!-- Total, Reopened and the three charts keep every number they had.
+             They are folded away so the home screen stays calm; one tap opens
+             them. Nothing was removed. -->
+        <details class="disclosure">
+          <summary class="disclosure__summary">
+            <span class="disclosure__icon">${icon('bar-chart', 'icon-md')}</span>
+            <span class="grow">
+              <span class="disclosure__title">Complaint statistics</span>
+              <span class="disclosure__hint">Totals and charts by status, department and priority</span>
+            </span>
+            ${icon('chevron-down', 'icon-md')}
+          </summary>
+          <div class="disclosure__body stack">
+            <div class="grid grid-2">
+              ${statCard({ label: 'Total Complaints', value: summary.total, icon: 'clipboard-list', href: '/student/complaints.html' })}
+              ${statCard({ label: 'Reopened', value: summary.reopened, icon: 'rotate-ccw', tone: 'purple', href: '/student/complaints.html?status=Reopened' })}
+            </div>
+            ${charts(recent, chartData.byDepartment, chartData.byPriority)}
+          </div>
+        </details>
       </div>`
 
     activateCharts(root)
@@ -188,6 +189,6 @@ async function load(user) {
 ready(() => {
   const user = requireRole(ROLES.STUDENT)
   if (!user) return
-  renderShell(user, { title: 'Dashboard' })
+  renderShell(user, { title: 'Home' })
   load(user)
 })

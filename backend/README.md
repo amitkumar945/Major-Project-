@@ -80,11 +80,16 @@ system to a network.
 python -m pytest tests/ -q
 ```
 
-137 tests covering registration, login, JWT verification, role authorisation,
+301 tests covering registration, login, JWT verification, role authorisation,
 OTP, complaint creation, tracking, status flow, remarks, resolution, feedback,
 reopen, file upload, department prediction, priority prediction, duplicate
 detection, officer assignment, SLA escalation, analytics and audit logging —
 plus invalid input and unauthorised access for each.
+
+`tests/test_resilience.py` additionally proves the submission path survives a
+failure in any supporting subsystem: a crash in the classifier, an unreachable
+notifications collection or a failing audit write must never cost a user their
+complaint.
 
 Tests use a **separate database** (`grievance_management_test`), dropped at the
 end of the run, so development data is never touched.
@@ -232,6 +237,23 @@ instead of failing — the pipeline can never break complaint submission.
 3. Change the `SEED_*_PASSWORD` values.
 4. Set `FLASK_DEBUG=false` and `CORS_ORIGINS` to the real origin.
 5. Run behind a production WSGI server (`waitress`, `gunicorn`) — not `app.py`.
+
+### Automatic SLA escalation
+
+Complaints that pass their deadline escalate up a three-level ladder. That
+sweep has always been available on the admin screen
+(`POST /api/admin/sla-check`); it can now also run on a timer:
+
+```bash
+SLA_AUTO_CHECK=true
+SLA_CHECK_INTERVAL_MINUTES=60
+```
+
+**Off by default** - with it false the server behaves exactly as before. The
+alternative is to leave it off and point cron / Windows Task Scheduler at the
+admin endpoint instead. With several gunicorn workers each worker would start
+its own timer; the sweep is idempotent so that is safe, just wasteful, so
+prefer one worker or the external-cron approach.
 
 ---
 

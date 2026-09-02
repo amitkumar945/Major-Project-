@@ -5,6 +5,7 @@
 import { esc, icon, mount, qs, ready } from '../components/dom.js'
 import { pageHeader, renderShell } from '../components/shell.js'
 import { requireRole } from '../components/session.js'
+import { toast } from '../components/toast.js'
 import { errorState, loadingState, statCard, starRating } from '../components/ui.js'
 import {
   activateCharts,
@@ -15,7 +16,11 @@ import {
   groupedBars,
   lineChart,
 } from '../components/charts.js'
-import { getAnalyticsOverview, getFeedbackEntries } from '../services/analyticsService.js'
+import {
+  exportAnalytics,
+  getAnalyticsOverview,
+  getFeedbackEntries,
+} from '../services/analyticsService.js'
 import { getAllComplaints } from '../services/complaintService.js'
 import {
   PRIORITY_RAMP,
@@ -252,9 +257,26 @@ ready(() => {
       title: 'Analytics',
       lead: 'Eight views of how the grievance system is performing.',
       crumbs: [{ label: 'Dashboard', href: '/admin/dashboard.html' }, { label: 'Analytics' }],
-      actions: `<button type="button" class="btn btn--secondary" onclick="window.print()">${icon('printer', 'icon-sm')}Print</button>`,
+      actions: `
+        <button type="button" class="btn btn--secondary" id="export-analytics">
+          ${icon('download', 'icon-sm')}Export CSV
+        </button>
+        <button type="button" class="btn btn--secondary" onclick="window.print()">${icon('printer', 'icon-sm')}Print</button>`,
     })}
     <div id="area"></div>`
+
+  qs('#export-analytics')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget
+    button.disabled = true
+    try {
+      const { name } = await exportAnalytics()
+      toast.success(`Saved ${name}`, 'Export ready')
+    } catch (error) {
+      toast.error(error.message, 'Export failed')
+    } finally {
+      button.disabled = false
+    }
+  })
 
   load(user)
 })

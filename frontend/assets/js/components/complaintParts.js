@@ -6,6 +6,7 @@
 
 import { esc, html, icon } from './dom.js'
 import { avatar } from './ui.js'
+import { API_BASE_URL } from '../services/mockApi.js'
 import {
   formatCoordinate,
   formatDate,
@@ -150,13 +151,16 @@ export function evidenceGallery(evidence = []) {
   const tiles = evidence
     .map((file) => html(
       '<li class="gallery__item">',
-      '<div class="gallery__media">',
-      file.url
-        ? `<img src="${esc(file.url)}" alt="${esc(file.name)}">`
-        : html(
-            icon(FILE_ICONS[file.kind] ?? 'paperclip', 'icon-xl'),
-            `<span class="gallery__kind">${esc(file.kind)}</span>`,
-          ),
+      // `/api/files/...` requires a Bearer token, and the browser cannot put
+      // one on an <img src> request - that combination is what produced a 401
+      // and a broken thumbnail. So the tile starts as the icon placeholder and
+      // `hydrateEvidenceThumbnails()` swaps in a blob URL it fetched WITH the
+      // token. A file whose preview cannot be loaded simply keeps this tile,
+      // which is also what non-previewable kinds (pdf, doc) always show.
+      `<div class="gallery__media"${file.url ? ` data-evidence-src="${esc(file.url)}"` : ''}`,
+      ` data-evidence-name="${esc(file.name)}" data-evidence-kind="${esc(file.kind ?? '')}">`,
+      icon(FILE_ICONS[file.kind] ?? 'paperclip', 'icon-xl'),
+      `<span class="gallery__kind">${esc(file.kind)}</span>`,
       '</div>',
       '<div class="gallery__foot">',
       `<p class="truncate" style="font-size:var(--fs-xs);font-weight:500" title="${esc(file.name)}">${esc(file.name)}</p>`,
@@ -166,6 +170,112 @@ export function evidenceGallery(evidence = []) {
     .join('')
 
   return `<ul class="gallery">${tiles}</ul>`
+}
+
+/** Image types worth previewing. Everything else keeps its icon tile. */
+const PREVIEWABLE = new Set(['image'])
+
+/**
+ * Load the thumbnails a `evidenceGallery()` could not put in an `<img src>`.
+ *
+ * Evidence is private, so `/api/files/...` is authenticated. A browser sends no
+ * Authorization header on an `<img>` request, which is why a direct `src` gets
+ * 401 - so each image is fetched here WITH the bearer token, exactly the way
+ * `download()` in the API layer does, and handed to the tile as a blob URL.
+ * The endpoint keeps its authentication and its per-complaint permission check.
+ *
+ * Safe to call after every re-render: tiles already loaded are skipped.
+ *
+ * @param {ParentNode} [scope] container to search; defaults to the document
+ * @returns {Promise<void>} resolves once every tile has settled
+ */
+export async function hydrateEvidenceThumbnails(scope = document) {
+  const root = typeof scope === 'string' ? document.querySelector(scope) : scope
+  if (!root) return
+
+  const tiles = [...root.querySelectorAll('[data-evidence-src]')].filter(
+    (tile) => !tile.dataset.evidenceState,
+  )
+
+  await Promise.all(tiles.map((tile) => hydrateOne(tile)))
+}
+
+async function hydrateOne(tile) {
+  const source = tile.dataset.evidenceSrc
+  const kind = tile.dataset.evidenceKind
+
+  // Only images become thumbnails; a PDF or document keeps its icon tile, and
+  // marking it done stops a later re-render from retrying it.
+  if (!source || !PREVIEWABLE.has(kind)) {
+    tile.dataset.evidenceState = 'skipped'
+    return
+  }
+
+  tile.dataset.evidenceState = 'loading'
+  tile.setAttribute('aria-busy', 'true')
+
+  try {
+    const blob = await fetchEvidenceBlob(source)
+    const objectUrl = URL.createObjectURL(blob)
+
+    const image = new Image()
+    image.alt = tile.dataset.evidenceName ?? 'Evidence'
+    // Release the blob once the browser has decoded it, so a long-lived page
+    // does not accumulate object URLs.
+    image.addEventListener('load', () => URL.revokeObjectURL(objectUrl), { once: true })
+    image.addEventListener('error', () => {
+      URL.revokeObjectURL(objectUrl)
+      failTile(tile, 'Preview unavailable')
+    }, { once: true })
+    image.src = objectUrl
+
+    tile.replaceChildren(image)
+    tile.dataset.evidenceState = 'loaded'
+  } catch (error) {
+    failTile(tile, error?.message ?? 'Preview unavailable')
+  } finally {
+    tile.removeAttribute('aria-busy')
+  }
+}
+
+/** Leave the icon in place and say why the preview is missing. */
+function failTile(tile, message) {
+  tile.dataset.evidenceState = 'failed'
+  const label = tile.querySelector('.gallery__kind')
+  if (label) label.textContent = message
+  tile.title = message
+}
+
+/**
+ * Fetch one protected evidence file as a Blob.
+ *
+ * Kept local to this module so the gallery does not depend on the service
+ * layer, and so the failure messages can be specific enough to act on.
+ */
+async function fetchEvidenceBlob(url) {
+  let session = null
+  try {
+    session = JSON.parse(localStorage.getItem('dsvv_auth_session') ?? 'null')
+  } catch {
+    session = null
+  }
+
+  const token = session?.token
+  if (!token) throw new Error('Sign in to view')
+
+  // `url` is the server-issued path (/api/files/...). When the frontend is
+  // served by something other than Flask, API_BASE_URL is absolute, so resolve
+  // against its origin - otherwise the request would go to the static server.
+  const base = API_BASE_URL.startsWith('http') ? new URL(API_BASE_URL).origin : location.origin
+  const response = await fetch(new URL(url, base), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (response.ok) return response.blob()
+  if (response.status === 401) throw new Error('Session expired')
+  if (response.status === 403) throw new Error('Not permitted')
+  if (response.status === 404) throw new Error('File missing')
+  throw new Error('Preview unavailable')
 }
 
 /* ============================================================= DEADLINE === */

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" width="1600" height="1000" role="img" aria-label="Campus photograph placeholder">
+  <title>Campus photograph placeholder</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#cfe6f7"/>
+      <stop offset="1" stop-color="#eef6fb"/>
+    </linearGradient>
+    <linearGradient id="bld" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3d9b4"/>
+      <stop offset="1" stop-color="#e3bf90"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1000" fill="url(#sky)"/>
+  <circle cx="1290" cy="200" r="70" fill="#ffd88a" fill-opacity=".75"/>
+  <!-- distant tree line -->
+  <g fill="#b9d3ad" fill-opacity=".8">
+    <circle cx="180" cy="620" r="70"/><circle cx="260" cy="640" r="55"/>
+    <circle cx="1420" cy="630" r="72"/><circle cx="1340" cy="650" r="52"/>
+  </g>
+  <!-- main hall -->
+  <rect x="560" y="380" width="480" height="300" fill="url(#bld)"/>
+  <polygon points="800,250 1080,390 520,390" fill="#d99a52"/>
+  <rect x="770" y="300" width="60" height="90" rx="30" fill="#e7b877"/>
+  <g fill="#8fb6d6" fill-opacity=".9">
+    <rect x="610" y="440" width="60" height="80" rx="6"/><rect x="700" y="440" width="60" height="80" rx="6"/>
+    <rect x="840" y="440" width="60" height="80" rx="6"/><rect x="930" y="440" width="60" height="80" rx="6"/>
+    <rect x="610" y="560" width="60" height="80" rx="6"/><rect x="700" y="560" width="60" height="80" rx="6"/>
+    <rect x="840" y="560" width="60" height="80" rx="6"/><rect x="930" y="560" width="60" height="80" rx="6"/>
+  </g>
+  <rect x="770" y="570" width="60" height="110" rx="8" fill="#a9743f"/>
+  <!-- side wings -->
+  <rect x="330" y="490" width="220" height="190" fill="#eccfa5"/>
+  <rect x="1050" y="490" width="220" height="190" fill="#eccfa5"/>
+  <!-- ground -->
+  <rect y="680" width="1600" height="320" fill="#cfe3bd"/>
+  <path d="M640 1000 L760 680 h80 L800 1000 Z" fill="#e6eddf"/>
+  <text x="800" y="900" text-anchor="middle" font-family="system-ui, Segoe UI, sans-serif"
+        font-size="30" fill="#6b7a63" letter-spacing="2">CAMPUS PHOTOGRAPH PLACEHOLDER</text>
+</svg>

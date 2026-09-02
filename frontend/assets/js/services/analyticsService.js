@@ -12,7 +12,7 @@
  * real complaints rather than fixed sample arrays.
  */
 
-import { request } from './mockApi.js'
+import { download, request } from './mockApi.js'
 
 /**
  * Chart data for a dashboard.
@@ -50,4 +50,10 @@ export async function getSlaReport() {
 /** Per-officer performance scorecard. */
 export async function getOfficerPerformance() {
   return request('/analytics/officers')
+}
+
+
+/** Download the headline analytics figures as a CSV file. */
+export async function exportAnalytics(scope = {}) {
+  return download('/analytics/export', scope, 'analytics.csv')
 }

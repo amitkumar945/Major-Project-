@@ -13,7 +13,7 @@
 import { esc, icon, on, qs, qsa } from './dom.js'
 import { avatar } from './ui.js'
 import { confirmDialog } from './modal.js'
-import { MENUS } from './navigation.js'
+import { MENUS, TABS } from './navigation.js'
 import { roleLabel, signOut } from './session.js'
 import { getUnreadCount } from '../services/notificationService.js'
 import { APP_NAME, UNIVERSITY_SHORT } from '../utils/constants.js'
@@ -116,6 +116,38 @@ function profileHref(role) {
   return `/${role}/profile.html`
 }
 
+/* ----------------------------------------------------------- tab bar --- */
+
+/**
+ * Bottom navigation for phones. Hidden from 1024px up by the `.tabbar` rules
+ * in layout.css, where the sidebar takes over.
+ */
+function tabbarMarkup(user, activeHref) {
+  const items = (TABS[user.role] ?? [])
+    .map((item) => {
+      const active = !item.drawer && activeHref.startsWith(item.href) ? 'is-active' : ''
+      const badge = item.badge === 'unread'
+        ? '<span class="tabbar__dot" data-unread-badge hidden>0</span>'
+        : ''
+
+      // The drawer item is a button, not a link - it opens the full menu.
+      if (item.drawer) {
+        return `<button type="button" class="tabbar__link" data-open-sidebar
+                        aria-controls="app-sidebar" aria-expanded="false">
+                  ${icon(item.icon, 'icon-md')}<span>${esc(item.label)}</span>
+                </button>`
+      }
+
+      return `<a class="tabbar__link ${active}" href="${esc(item.href)}"
+                 ${active ? 'aria-current="page"' : ''}>
+                ${icon(item.icon, 'icon-md')}${badge}<span>${esc(item.label)}</span>
+              </a>`
+    })
+    .join('')
+
+  return `<nav class="tabbar no-print" aria-label="Quick navigation">${items}</nav>`
+}
+
 /* ------------------------------------------------------------ page head --- */
 
 /**
@@ -158,6 +190,10 @@ export function renderShell(user, { title }) {
   qs('#sidebar').outerHTML = sidebarMarkup(user, activeHref)
   qs('#topbar').outerHTML = topbarMarkup(user, title)
 
+  // Appended rather than replacing a placeholder, so the existing HTML pages
+  // need no extra markup to gain mobile navigation.
+  document.querySelector('.app')?.insertAdjacentHTML('beforeend', tabbarMarkup(user, activeHref))
+
   document.title = `${title} · ${UNIVERSITY_SHORT} ${APP_NAME}`
 
   wireDrawer()
@@ -173,7 +209,7 @@ function wireDrawer() {
 
   function open() {
     sidebar.classList.add('is-open')
-    qs('[data-open-sidebar]')?.setAttribute('aria-expanded', 'true')
+    qsa('[data-open-sidebar]').forEach((b) => b.setAttribute('aria-expanded', 'true'))
     overlay = document.createElement('div')
     overlay.className = 'sidebar-overlay'
     overlay.addEventListener('click', close)
@@ -183,7 +219,7 @@ function wireDrawer() {
 
   function close() {
     sidebar.classList.remove('is-open')
-    qs('[data-open-sidebar]')?.setAttribute('aria-expanded', 'false')
+    qsa('[data-open-sidebar]').forEach((b) => b.setAttribute('aria-expanded', 'false'))
     overlay?.remove()
     overlay = null
     document.body.style.overflow = ''

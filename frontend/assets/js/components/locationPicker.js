@@ -5,11 +5,16 @@
  * block it on plain http and it is often denied during a demonstration, so if
  * it is unavailable we fall back to a simulated point near the campus centre -
  * the prototype must always be demonstrable.
+ *
+ * A real fix from outside the campus is not usable either: this is a campus
+ * grievance system, so the student is told to place the pin on campus instead
+ * of silently filing a complaint against their home address.
  */
 
 import { esc, icon, mount, on, qs, setLoading } from './dom.js'
 import { hydrateMaps, mapPreview } from './complaintParts.js'
 import { CAMPUS_CENTER } from '../utils/constants.js'
+import { isInsideCampus } from '../utils/validators.js'
 
 /** Known campus landmarks, so the simulated fix gets a sensible address. */
 const LANDMARKS = [
@@ -29,6 +34,8 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
   let location = { latitude: null, longitude: null, address: '', block: '', accuracy: 0 }
   let source = null
   let errors = {}
+  // Set when the device reported a real fix that fell outside the campus.
+  let offCampus = false
 
   function render() {
     node.innerHTML = `
@@ -44,7 +51,19 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
       </div>
 
       ${
-        source
+        offCampus
+          ? `<div class="alert alert--warning" style="margin-top:var(--sp-3)">
+              <span class="alert__icon">${icon('alert-circle', 'icon-lg')}</span>
+              <div class="grow">
+                <p class="alert__title">You are outside the DSVV campus</p>
+                <p class="alert__text">Complaints can only be filed for locations inside the campus. Move the map pin to the spot you are reporting, or type the coordinates below.</p>
+              </div>
+            </div>`
+          : ''
+      }
+
+      ${
+        source && !offCampus
           ? `<p class="muted" style="margin-top:var(--sp-3)">${
               source === 'device'
                 ? 'Location captured from your device GPS.'
@@ -57,12 +76,12 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
         <div class="field" data-field="latitude">
           <label class="field__label" for="loc-lat">Latitude</label>
           <input type="number" step="0.000001" class="field__control" id="loc-lat" data-lat
-                 value="${location.latitude ?? ''}" placeholder="29.945700">
+                 value="${location.latitude ?? ''}" placeholder="29.999650">
         </div>
         <div class="field" data-field="longitude">
           <label class="field__label" for="loc-lng">Longitude</label>
           <input type="number" step="0.000001" class="field__control" id="loc-lng" data-lng
-                 value="${location.longitude ?? ''}" placeholder="78.164200">
+                 value="${location.longitude ?? ''}" placeholder="78.194600">
         </div>
       </div>
 
@@ -111,13 +130,20 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
     onChange(location)
   }
 
-  /** Simulated fix used when the browser cannot give us a real one. */
+  /**
+   * Simulated fix used when the browser cannot give us a real one.
+   *
+   * The jitter is +/- 0.0015 deg (~165 m) around the campus centre, which keeps
+   * every simulated point inside the campus outline - a demo point that failed
+   * its own validation would be worse than no demo at all.
+   */
   function simulate() {
     const landmark = LANDMARKS[Math.floor(Math.random() * LANDMARKS.length)]
     source = 'simulated'
+    offCampus = false
     update({
-      latitude: Number((CAMPUS_CENTER.latitude + (Math.random() - 0.5) * 0.004).toFixed(6)),
-      longitude: Number((CAMPUS_CENTER.longitude + (Math.random() - 0.5) * 0.004).toFixed(6)),
+      latitude: Number((CAMPUS_CENTER.latitude + (Math.random() - 0.5) * 0.003).toFixed(6)),
+      longitude: Number((CAMPUS_CENTER.longitude + (Math.random() - 0.5) * 0.003).toFixed(6)),
       accuracy: Math.floor(6 + Math.random() * 14),
       address: location.address || landmark.address,
       block: location.block || landmark.block,
@@ -134,12 +160,27 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6))
+        const longitude = Number(position.coords.longitude.toFixed(6))
+
+        // A genuine fix from off campus cannot be used as a complaint location.
+        // Drop the pin on the campus centre instead and explain why, so the
+        // student can drag it to the right spot rather than hitting a bare
+        // validation error at submit time.
+        if (!isInsideCampus(latitude, longitude)) {
+          source = 'device'
+          offCampus = true
+          update({
+            latitude: CAMPUS_CENTER.latitude,
+            longitude: CAMPUS_CENTER.longitude,
+            accuracy: 0,
+          })
+          return
+        }
+
         source = 'device'
-        update({
-          latitude: Number(position.coords.latitude.toFixed(6)),
-          longitude: Number(position.coords.longitude.toFixed(6)),
-          accuracy: Math.round(position.coords.accuracy),
-        })
+        offCampus = false
+        update({ latitude, longitude, accuracy: Math.round(position.coords.accuracy) })
       },
       () => simulate(), // permission denied or unavailable - keep the demo working
       { enableHighAccuracy: true, timeout: 6000 },
@@ -151,12 +192,16 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
   // Typing should not redraw the panel, or the caret would jump on every key.
   on(node, 'input', '[data-address]', (event) => update({ address: event.target.value }, false))
   on(node, 'input', '[data-block]', (event) => update({ block: event.target.value }, false))
-  on(node, 'change', '[data-lat]', (event) =>
-    update({ latitude: event.target.value === '' ? null : Number(event.target.value) }),
-  )
-  on(node, 'change', '[data-lng]', (event) =>
-    update({ longitude: event.target.value === '' ? null : Number(event.target.value) }),
-  )
+  // Typing coordinates by hand replaces whatever the GPS said, so the
+  // off-campus notice from that fix no longer applies.
+  on(node, 'change', '[data-lat]', (event) => {
+    offCampus = false
+    update({ latitude: event.target.value === '' ? null : Number(event.target.value) })
+  })
+  on(node, 'change', '[data-lng]', (event) => {
+    offCampus = false
+    update({ longitude: event.target.value === '' ? null : Number(event.target.value) })
+  })
 
   render()
 

@@ -8,7 +8,12 @@ import { requireRole } from '../components/session.js'
 import { confirmDialog } from '../components/modal.js'
 import { toast } from '../components/toast.js'
 import { createComplaintList, FILTER_FIELDS } from '../components/complaintListView.js'
-import { closeComplaint, escalateComplaint, getAllComplaints } from '../services/complaintService.js'
+import {
+  closeComplaint,
+  escalateComplaint,
+  exportComplaints,
+  getAllComplaints,
+} from '../services/complaintService.js'
 import { ACTIVE_STATUSES, ROLES, STATUS } from '../utils/constants.js'
 
 const DETAILS = '/admin/complaint-details.html'
@@ -27,6 +32,9 @@ ready(() => {
       actions: `
         <button type="button" class="btn btn--secondary" id="toggle-map">
           ${icon('map-pin', 'icon-sm')}<span data-label>Map view</span>
+        </button>
+        <button type="button" class="btn btn--secondary" id="export-csv">
+          ${icon('download', 'icon-sm')}Export CSV
         </button>
         <a class="btn btn--secondary" href="/admin/escalations.html">${icon('shield-alert', 'icon-sm')}Escalations</a>`,
     })}
@@ -115,6 +123,21 @@ ready(() => {
     mapPanel.hidden = !showing
     qs('[data-label]', toggle).textContent = showing ? 'Hide map' : 'Map view'
     if (showing && !mapLoaded) showMap()
+  })
+
+  // Export whatever the table is currently showing: the same filters go to the
+  // server, which scopes the rows to the signed-in user.
+  qs('#export-csv')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget
+    button.disabled = true
+    try {
+      const { name } = await exportComplaints(list.filters())
+      toast.success(`Saved ${name}`, 'Export ready')
+    } catch (error) {
+      toast.error(error.message, 'Export failed')
+    } finally {
+      button.disabled = false
+    }
   })
 
   on('#list', 'click', '[data-escalate]', async (event, button) => {

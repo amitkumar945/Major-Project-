@@ -112,7 +112,9 @@ function view() {
     <div class="row-wrap" style="justify-content:center">${demoButtons}</div>
 
     <p class="note-dashed" style="margin-top:var(--sp-6)">
-      These demo accounts exist only in the browser. Real authentication arrives with the Flask API.
+      These are the seeded demo accounts from the database. They sign in through the
+      real API like any other account. Create further accounts from Admin &rsaquo; Officers
+      (officers) or the registration page (students).
     </p>`
 }
 

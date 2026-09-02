@@ -87,6 +87,13 @@ def create_app(config_object=None) -> Flask:
     _register_error_handlers(app)
     _register_meta_routes(app)
 
+    # Periodic SLA sweep. Off unless SLA_AUTO_CHECK=true, so this is a no-op
+    # for any deployment that has not asked for it; the admin screen's
+    # POST /api/admin/sla-check keeps working either way.
+    from services import scheduler_service
+
+    scheduler_service.start(app)
+
     if app.config.get("SERVE_FRONTEND"):
         _register_frontend(app)
 

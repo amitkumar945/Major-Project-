@@ -128,6 +128,19 @@ class Config:
     RATE_LIMIT_OTP = _int("RATE_LIMIT_OTP", 5)
     RATE_LIMIT_WINDOW = _int("RATE_LIMIT_WINDOW", 60)    # seconds
 
+    # ------------------------------------------------- SLA auto-escalation
+    # `escalation_service.run_sla_check()` escalates complaints whose deadline
+    # has passed. It has always been callable from the admin screen
+    # (POST /api/admin/sla-check); this runs it on a timer as well, so a
+    # deployment nobody is watching still escalates on time.
+    #
+    # OFF by default: enabling it changes what the server does while idle, so
+    # it has to be asked for. With it off the behaviour is exactly as before.
+    # An external cron or Windows Task Scheduler hitting the admin endpoint
+    # remains a perfectly good alternative.
+    SLA_AUTO_CHECK = _bool("SLA_AUTO_CHECK", False)
+    SLA_CHECK_INTERVAL_MINUTES = _int("SLA_CHECK_INTERVAL_MINUTES", 60)
+
     # ------------------------------------------------------------ behaviour
     SEED_ON_START = _bool("SEED_ON_START", True)
     FLASK_ENV = _str("FLASK_ENV", "development")
@@ -150,6 +163,9 @@ class TestConfig(Config):
     RATE_LIMIT_ENABLED = False
     DEBUG = False
     SERVE_FRONTEND = False
+    # Never let a background thread run during the suite: it would touch the
+    # test database underneath the assertions.
+    SLA_AUTO_CHECK = False
 
 
 # Environments in which returning an OTP to the caller is acceptable.

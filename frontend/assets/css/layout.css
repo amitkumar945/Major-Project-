@@ -29,11 +29,11 @@
 .logo--sm .logo__name { font-size: var(--fs-base); }
 
 /* --------------------------------------------------- logo placeholder ---
-   The official DSVV crest is not in the repository yet. The placeholder mark
-   sits underneath and the real image is layered on top, so the moment
-   `assets/img/dsvv-logo.png` exists it takes over on every page. If the file
-   is missing the <img> removes itself and the placeholder shows through —
-   never a broken-image icon, and never an invented crest.
+   The CSS placeholder mark sits underneath and the image in
+   `assets/img/dsvv-logo.svg` is layered on top. Replacing that file with the
+   official crest swaps the mark on every page. If the file is ever missing the
+   <img> removes itself and the placeholder shows through — never a
+   broken-image icon, and never an invented crest.
    See `assets/img/README.md`.
    ----------------------------------------------------------------------- */
 
@@ -282,7 +282,8 @@
   width: var(--sidebar-w);
   display: flex;
   flex-direction: column;
-  background: var(--slate-900);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   transform: translateX(-100%);
   transition: transform var(--t-slow);
 }
@@ -296,7 +297,7 @@
   gap: var(--sp-2);
   height: var(--topbar-h);
   padding-inline: var(--sp-4);
-  border-bottom: 1px solid rgb(255 255 255 / .1);
+  border-bottom: 1px solid var(--border-soft);
   flex: none;
 }
 
@@ -310,40 +311,45 @@
 }
 
 .sidebar__section {
-  padding: var(--sp-4) var(--sp-3) var(--sp-2);
-  font-size: 11px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  letter-spacing: .08em;
+  letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--slate-500);
+  color: var(--text-faint);
 }
 
 .sidebar__link {
   display: flex;
   align-items: center;
   gap: .75rem;
-  padding: .625rem .75rem;
+  min-height: var(--tap);
+  padding: .625rem .875rem;
   border-radius: var(--r-md);
-  color: var(--slate-400);
+  color: var(--slate-600);
   font-size: var(--fs-base);
   font-weight: 500;
   transition: background-color var(--t-fast), color var(--t-fast);
 }
 
-.sidebar__link:hover { background: rgb(255 255 255 / .07); color: #fff; }
+.sidebar__link .icon { color: var(--slate-400); transition: color var(--t-fast); }
+
+.sidebar__link:hover { background: var(--slate-100); color: var(--slate-900); }
+.sidebar__link:hover .icon { color: var(--slate-600); }
 
 .sidebar__link.is-active {
-  background: var(--brand-600);
-  color: #fff;
-  box-shadow: var(--shadow-sm);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-weight: 600;
 }
+.sidebar__link.is-active .icon { color: var(--brand-600); }
 
 .sidebar__link .icon { flex: none; }
 .sidebar__link .badge--counter { margin-left: auto; }
 
 .sidebar__foot {
   padding: var(--sp-3);
-  border-top: 1px solid rgb(255 255 255 / .1);
+  border-top: 1px solid var(--border-soft);
   flex: none;
 }
 
@@ -353,26 +359,35 @@
   gap: .625rem;
   padding: .625rem .75rem;
   border-radius: var(--r-md);
-  background: rgb(255 255 255 / .06);
+  background: var(--slate-50);
 }
 
-.sidebar__user-name { font-size: var(--fs-base); font-weight: 500; color: #fff; }
-.sidebar__user-role { font-size: var(--fs-xs); color: var(--slate-400); }
+.sidebar__user-name { font-size: var(--fs-base); font-weight: 600; color: var(--heading); }
+.sidebar__user-role { font-size: var(--fs-xs); color: var(--text-muted); }
 
 .sidebar__logout {
   display: flex;
   align-items: center;
   gap: .75rem;
   width: 100%;
+  min-height: var(--tap);
   margin-top: var(--sp-2);
-  padding: .625rem .75rem;
+  padding: .625rem .875rem;
   border-radius: var(--r-md);
-  color: var(--slate-400);
+  color: var(--slate-600);
   font-size: var(--fs-base);
   font-weight: 500;
   transition: background-color var(--t-fast), color var(--t-fast);
 }
-.sidebar__logout:hover { background: rgb(239 68 68 / .15); color: #fca5a5; }
+.sidebar__logout:hover { background: var(--red-50); color: var(--red-700); }
+
+/* The sidebar is a light surface, so the logo reverts to its dark treatment
+   even though the shared `logo--light` modifier is still on the markup (the
+   auth aside still needs that modifier as-is). */
+.sidebar .logo--light .logo__mark { background: var(--brand-600); box-shadow: none; }
+.sidebar .logo--light .logo__name { color: var(--heading); }
+.sidebar .logo--light .logo__sub  { color: var(--text-muted); }
+.sidebar .sidebar__close { color: var(--slate-500) !important; }
 
 /* dark overlay behind the drawer on small screens */
 .sidebar-overlay {
@@ -464,7 +479,9 @@
 
 .page {
   flex: 1;
-  padding: var(--sp-6) var(--sp-4) var(--sp-12);
+  /* The bottom padding clears the mobile tab bar; on desktop the tab bar is
+     hidden and --tabbar-h is set to 0 by the 1024px media query below. */
+  padding: var(--sp-6) var(--sp-4) calc(var(--sp-12) + var(--tabbar-h));
 }
 
 .page__head { margin-bottom: var(--sp-6); }
@@ -495,6 +512,75 @@
 .page__lead  { color: var(--text-muted); margin-top: .25rem; }
 .page__actions { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 
+/* ================================================== MOBILE TAB BAR ======= */
+/* A phone-style bottom bar carrying the five destinations a student needs.
+   It never replaces the drawer - the drawer still holds the complete menu
+   behind the hamburger, so nothing becomes unreachable. */
+
+.tabbar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: stretch;
+  background: rgb(255 255 255 / .97);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.tabbar__link {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: var(--tabbar-h);
+  padding: .375rem .25rem;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  text-align: center;
+  line-height: 1.2;
+  transition: color var(--t-fast);
+}
+
+.tabbar__link .icon { font-size: 22px; }
+.tabbar__link:hover { color: var(--brand-600); }
+.tabbar__link.is-active { color: var(--brand-700); font-weight: 600; }
+
+.tabbar__dot {
+  position: absolute;
+  top: .375rem;
+  left: 50%;
+  margin-left: 2px;
+  min-width: 17px;
+  height: 17px;
+  padding-inline: 4px;
+  border-radius: var(--r-full);
+  background: var(--red-600);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ------------------------------------------- page header on small screens */
+/* Side-by-side title and action buttons squeeze the heading into a narrow
+   column on a phone. Below 720px the actions drop underneath and stretch, so
+   they are also easier to tap. */
+
+@media (max-width: 719px) {
+  .page__bar { flex-direction: column; align-items: stretch; gap: var(--sp-3); }
+  .page__actions { width: 100%; }
+  .page__actions > .btn { flex: 1; }
+}
+
 @media (min-width: 1024px) {
   .sidebar { transform: translateX(0); }
   .sidebar__close { display: none; }
@@ -502,6 +588,10 @@
   .app__main { margin-left: var(--sidebar-w); }
   .topbar__toggle { display: none; }
   .page { padding-inline: var(--sp-6); }
+
+  /* On desktop the sidebar is always visible, so the tab bar is redundant. */
+  .tabbar { display: none; }
+  .app { --tabbar-h: 0px; }
 }
 
 @media (min-width: 1280px) {

@@ -94,6 +94,25 @@ function card(officer, busiest) {
 }
 
 function formFields(officer = {}) {
+  const editing = Boolean(officer.id)
+
+  // A new officer needs a sign-in password; editing one does not, so the field
+  // only appears when creating. The officer changes it after their first login.
+  const passwordField = editing
+    ? ''
+    : `
+      <div class="field" data-field="password">
+        <label class="field__label" for="off-pass">
+          Initial password<span class="field__req">*</span>
+        </label>
+        <input type="password" class="field__control" id="off-pass" name="password"
+               autocomplete="new-password" placeholder="At least 8 characters" required>
+        <p class="field__hint">
+          Share this with the officer securely. They can change it from their profile
+          after signing in.
+        </p>
+      </div>`
+
   return `
     <form id="officer-form" novalidate class="stack-sm">
       <div class="grid grid-2">
@@ -132,6 +151,8 @@ function formFields(officer = {}) {
                  value="${esc(officer.designation ?? '')}" placeholder="e.g. Electrical Maintenance Officer" required>
         </div>
       </div>
+
+      ${passwordField}
     </form>`
 }
 
@@ -157,7 +178,7 @@ function openForm(officer = null) {
     const values = formValues(form)
 
     clearErrors(form)
-    const errors = validateOfficer(values)
+    const errors = validateOfficer(values, !editing)
     if (!isValid(errors)) {
       showErrors(form, errors)
       return

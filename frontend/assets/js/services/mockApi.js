@@ -1,32 +1,17 @@
 /**
- * Mock API transport.
+ * HTTP transport for every service in this folder.
  *
- * Every service in this folder talks to the pages through the same
- * promise-based contract that a real HTTP call would use. Today the data comes
- * from the files in `assets/js/data`; tomorrow only the body of each service
- * function changes.
+ * The integration this file was written for is done: `request()` below calls
+ * the real Flask API with the browser's built-in `fetch`, and every service
+ * goes through it. The filename is kept so the imports across the app stay
+ * unchanged.
  *
- * ---------------------------------------------------------------------------
- * FUTURE FLASK INTEGRATION
- * ---------------------------------------------------------------------------
- * The browser's built-in `fetch` is all that is needed - no library, no build
- * step. Set `USE_API` to true below once the Flask server is running.
- *
- * 1. A service body changes from this:
- *
- *      export function getComplaints(filters) {
- *        return respond(applyFilters(filters))
- *      }
- *
- *    to this:
- *
- *      export function getComplaints(filters) {
- *        return request('/complaints', { query: filters })
- *      }
- *
- * 2. No page needs to change, because pages only ever await the service
- *    function and never know where the data came from.
- * ---------------------------------------------------------------------------
+ * Only `request`, `upload` and `download` are imported by the services today.
+ * The `respond` / `fail` / `delay` helpers further down, and the fixtures in
+ * `assets/js/data`, are left over from the prototype and currently unused.
+ * They are deliberately kept, not deleted: they still document the shapes the
+ * API returns and are useful for offline UI work. Remove them only as a
+ * separate, deliberate cleanup.
  */
 
 /**
@@ -37,12 +22,26 @@
  * (http://localhost:5500). In the second case the browser still needs an
  * absolute URL, so fall back to the Flask origin when the page is not being
  * served by Flask itself.
+ *
+ * If the API ever lives on a different origin from these pages, setting
+ * `window.__API_BASE_URL__` in `assets/js/config.js` overrides both branches.
+ * That file ships empty, so the behaviour below is what normally runs.
  */
+const CONFIGURED = typeof window !== 'undefined' ? window.__API_BASE_URL__ : null
+
+/** A configured value may be a full origin or already end in `/api`. */
+function normaliseBase(value) {
+  const trimmed = String(value).trim().replace(/\/+$/, '')
+  return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`
+}
+
 const SAME_ORIGIN = ['5000', '80', '443', ''].includes(location.port)
 
-export const API_BASE_URL = SAME_ORIGIN
-  ? '/api'
-  : `${location.protocol}//${location.hostname}:5000/api`
+export const API_BASE_URL = CONFIGURED
+  ? normaliseBase(CONFIGURED)
+  : SAME_ORIGIN
+    ? '/api'
+    : `${location.protocol}//${location.hostname}:5000/api`
 
 /**
  * The real Flask backend is now connected; every service calls it over HTTP.
@@ -216,4 +215,63 @@ export async function upload(path, files, fields = {}, method = 'POST') {
   }
 
   return unwrap(payload)
+}
+
+
+/**
+ * Download a file from an authenticated endpoint.
+ *
+ * `fetch` is used rather than pointing the browser straight at the URL, so the
+ * token travels in the Authorization header and never lands in the address bar,
+ * browser history or the server access log. The response is turned into a blob
+ * and saved through a temporary object URL.
+ *
+ * @param {string} path   API path, e.g. '/complaints/export'
+ * @param {object} query  Query-string filters
+ * @param {string} fallbackName  Used when the server sends no filename
+ */
+export async function download(path, query = {}, fallbackName = 'download.csv') {
+  const url = new URL(API_BASE_URL + path, location.origin)
+  Object.entries(query ?? {}).forEach(([key, value]) => {
+    if (value != null && value !== '') url.searchParams.set(key, value)
+  })
+
+  const token = authToken()
+
+  let response
+  try {
+    response = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+  } catch {
+    throw new ApiError('Cannot reach the server. Please check that the backend is running.', 0)
+  }
+
+  if (!response.ok) {
+    if (response.status === 401 && token) handleExpiredSession()
+    // An error body is JSON even though the success body is a file.
+    const payload = await response.json().catch(() => null)
+    throw new ApiError(
+      payload?.message ?? 'The download could not be completed.',
+      response.status,
+    )
+  }
+
+  // Prefer the server's filename from Content-Disposition.
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = disposition.match(/filename="?([^";]+)"?/i)
+  const name = match?.[1]?.trim() || fallbackName
+
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  // Give the browser a moment to start the save before revoking.
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+
+  return { name, size: blob.size }
 }

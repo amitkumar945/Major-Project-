@@ -6,6 +6,8 @@
  * so validation logic is never duplicated inside components.
  */
 
+import { CAMPUS_BOUNDS, CAMPUS_POLYGON } from './constants.js'
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 export function isEmail(value = '') {
@@ -81,10 +83,52 @@ export function validateComplaintDetails(values) {
   return errors
 }
 
+/**
+ * Ray-casting point-in-polygon test over [latitude, longitude] vertices.
+ *
+ * Counts how many polygon edges a ray cast east from the point crosses; an odd
+ * count means the point is inside. Mirrors `point_in_polygon()` in
+ * `backend/utils/validators.py`.
+ */
+export function pointInPolygon(latitude, longitude, polygon = CAMPUS_POLYGON) {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [latI, lngI] = polygon[i]
+    const [latJ, lngJ] = polygon[j]
+    if (latI > latitude !== latJ > latitude) {
+      const crossing = ((lngJ - lngI) * (latitude - latI)) / (latJ - latI) + lngI
+      if (longitude < crossing) inside = !inside
+    }
+  }
+  return inside
+}
+
+/**
+ * Padded bounding-box test - the tolerant check validation actually uses.
+ *
+ * `pointInPolygon` is the exact campus outline; this box adds roughly 150 m of
+ * slack so ordinary GPS drift at the gate or along the boundary wall does not
+ * reject a genuine complaint. Mirrors `in_campus_bounds()` on the server.
+ */
+export function isInsideCampus(latitude, longitude) {
+  const lat = Number(latitude)
+  const lng = Number(longitude)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+  return (
+    lat >= CAMPUS_BOUNDS.minLatitude &&
+    lat <= CAMPUS_BOUNDS.maxLatitude &&
+    lng >= CAMPUS_BOUNDS.minLongitude &&
+    lng <= CAMPUS_BOUNDS.maxLongitude
+  )
+}
+
 export function validateLocation(location) {
   const errors = {}
   if (location?.latitude == null || location?.longitude == null)
     errors.location = 'Capture or enter the complaint location'
+  else if (!isInsideCampus(location.latitude, location.longitude))
+    errors.location =
+      'Location must be inside the DSVV campus. Move the pin to the correct spot on campus.'
   if (!location?.address?.trim())
     errors.address = 'Enter a landmark or building name'
   return errors
@@ -111,7 +155,12 @@ export function validatePasswordChange(values) {
   return errors
 }
 
-export function validateOfficer(values) {
+/**
+ * @param {object} values
+ * @param {boolean} requirePassword - true when creating, false when editing.
+ *   A new officer needs a sign-in password; an existing one keeps theirs.
+ */
+export function validateOfficer(values, requirePassword = false) {
   const errors = {}
   if (!values.name?.trim()) errors.name = 'Officer name is required'
   if (!values.employeeId?.trim()) errors.employeeId = 'Employee ID is required'
@@ -119,6 +168,13 @@ export function validateOfficer(values) {
   else if (!isEmail(values.email)) errors.email = 'Enter a valid email address'
   if (!values.department) errors.department = 'Assign a department'
   if (!values.designation?.trim()) errors.designation = 'Designation is required'
+
+  if (requirePassword) {
+    if (!values.password) errors.password = 'Set an initial password for this officer'
+    else if (values.password.length < 8) {
+      errors.password = 'Password must be at least 8 characters'
+    }
+  }
   return errors
 }
 

@@ -108,7 +108,17 @@ def _recipient_email(user_id: str) -> str:
 
 
 def create(recipient_id: str, type_: str, title: str, message: str, complaint_id: str = None) -> dict:
-    """Store one notification and hand it to the delivery hook."""
+    """Store one notification and hand it to the delivery hook.
+
+    Best-effort, like `_deliver` below it. Notifying somebody is a *consequence*
+    of a complaint action, never a precondition for it: every caller runs after
+    the complaint has already been written, so letting a notification failure
+    escape would turn a completed submission into a 500 and leave the user
+    resubmitting a complaint that is already in the database.
+
+    A failure is therefore logged and swallowed, and the caller gets None -
+    exactly how `audit_service.log` already treats its own writes.
+    """
     if not recipient_id:
         return None
 
@@ -123,7 +133,15 @@ def create(recipient_id: str, type_: str, title: str, message: str, complaint_id
         "read": False,
     }
 
-    notifications().insert_one(notification)
+    try:
+        notifications().insert_one(notification)
+    except Exception:
+        logger.exception(
+            "Could not store the %s notification for user %s (complaint %s).",
+            type_, recipient_id, complaint_id or "-",
+        )
+        return None
+
     _deliver(notification)
     return clean_document(notification)
 

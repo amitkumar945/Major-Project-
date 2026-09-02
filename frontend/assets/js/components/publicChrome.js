@@ -27,11 +27,10 @@ const LINKS = [
 /**
  * The DSVV crest.
  *
- * `ASSETS.logo` points at a file that is not in the repository yet. Rather
- * than inventing a university crest, the markup renders a placeholder mark
- * underneath the image; the image sits on top and hides it once the real
- * file exists. `onerror` removes the broken image so the placeholder shows
- * through while the slot is empty.
+ * `ASSETS.logo` is a neutral placeholder emblem, not the official crest. The
+ * markup also renders a CSS placeholder mark underneath the image, and
+ * `onerror` removes the image if the file is ever missing, so the placeholder
+ * shows through instead of a broken-image icon.
  */
 function logoMark() {
   return `
