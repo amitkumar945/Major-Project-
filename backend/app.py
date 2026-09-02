@@ -61,7 +61,16 @@ def create_app(config_object=None) -> Flask:
         )
 
     # -------------------------------------------------------------- uploads
-    Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
+    upload_dir = Path(app.config["UPLOAD_FOLDER"])
+    try:
+        upload_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        if os.environ.get("VERCEL"):
+            fallback_dir = Path("/tmp/uploads")
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            app.config["UPLOAD_FOLDER"] = str(fallback_dir)
+        else:
+            raise
 
     # ----------------------------------------------------------------- cors
     # Explicit origins only - never "*", so credentials stay safe.

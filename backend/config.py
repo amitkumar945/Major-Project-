@@ -72,7 +72,12 @@ class Config:
     REFRESH_TOKEN_DAYS = _int("REFRESH_TOKEN_DAYS", 30)
 
     # ---------------------------------------------------------------- files
-    UPLOAD_FOLDER = _str("UPLOAD_FOLDER", str(BASE_DIR / "uploads"))
+    # Vercel's filesystem is read-only at runtime, so a relative path like
+    # "uploads" cannot be created there. Use a writable temp directory when the
+    # app is running on Vercel, but still allow local development to keep the
+    # repository-local uploads folder.
+    _default_upload_folder = "/tmp/uploads" if os.environ.get("VERCEL") else str(BASE_DIR / "uploads")
+    UPLOAD_FOLDER = _str("UPLOAD_FOLDER", _default_upload_folder)
     # Frontend caps uploads at 5 MB per file (UPLOAD_LIMITS in constants.js).
     MAX_FILE_SIZE = _int("MAX_FILE_SIZE", 5 * 1024 * 1024)
     MAX_FILES_PER_REQUEST = _int("MAX_FILES_PER_REQUEST", 5)
