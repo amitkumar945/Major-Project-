@@ -54,6 +54,10 @@ export function filterPanel({
     )
     .join('')
 
+  // Unique per rendered panel: the label's `for` must not collide if a page
+  // ever draws two filter strips, and the panel is re-rendered on every change.
+  const toggleId = `filters-toggle-${(filterPanel.seq = (filterPanel.seq ?? 0) + 1)}`
+
   const dates = showDates
     ? `
       <div>
@@ -89,6 +93,29 @@ export function filterPanel({
             : ''
         }
       </div>
+
+      <!--
+        On a phone the dropdowns used to stack into a tall wall of controls
+        before the first result was visible, which made the page look far more
+        complicated than it is. They now collapse behind one "Filters" toggle
+        on small screens; from 720px up the strip is exactly what it was.
+
+        This is a plain checkbox toggle rather than a details element on
+        purpose: a closed details stays closed no matter what CSS says, so a
+        desktop media query could not reopen it and officers would have lost
+        their filters. The checkbox is only a display switch, so
+        activateFilters() below still finds every control unchanged.
+
+        It starts open when a filter is already applied, so nobody loses sight
+        of a filter they set.
+      -->
+      <input type="checkbox" class="filters__toggle sr-only" id="${toggleId}"
+             ${active ? 'checked' : ''}>
+      <label class="filters__summary" for="${toggleId}">
+        ${icon('filter', 'icon-sm')}
+        <span>${active ? `Filters · ${active} applied` : 'Filters'}</span>
+        ${icon('chevron-down', 'icon-sm')}
+      </label>
 
       <div class="filters__grid">${selects}${dates}</div>
 

@@ -25,8 +25,14 @@ def _scope_for(user: dict) -> dict:
     if user["role"] == ROLE_STUDENT:
         return {"userId": user["id"]}
     if user["role"] == ROLE_OFFICER:
+        # An officer may narrow the view to their OWN department, and to
+        # nothing else: `?department=<another>` used to hand over that
+        # department's figures in full. Anything else falls back to their
+        # own queue, which is the narrower of the two.
         department = request.args.get("department")
-        return {"department": department} if department else {"officerId": user["id"]}
+        if department and department == user.get("department"):
+            return {"department": department}
+        return {"officerId": user["id"]}
 
     scope = {}
     if request.args.get("department"):

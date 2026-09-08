@@ -60,6 +60,16 @@ def create_app(config_object=None) -> Flask:
             "silence this, and configure MAIL_* so codes can be delivered."
         )
 
+    # ----------------------------------------------------------------- mail
+    # Report the SMTP settings once at startup so a misconfigured `.env` is
+    # visible immediately instead of only when the first OTP fails. Logs
+    # whether a password exists, never its value.
+    from services import email_service
+
+    # `describe_config()` reads `current_app.config`, so give it a context.
+    with app.app_context():
+        email_service.log_config(logger)
+
     # -------------------------------------------------------------- uploads
     upload_dir = Path(app.config["UPLOAD_FOLDER"])
     try:

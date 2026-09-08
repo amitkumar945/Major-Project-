@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DEBUG ONLY. Overrides the release config of the same name.
+
+  Permits cleartext HTTP so a debug build can reach the Flask dev server -
+  http://10.0.2.2:5000 from the emulator, or http://192.168.x.x:5000 from a
+  real handset on the same wifi. Also trusts user-installed certificates, so a
+  debugging proxy works.
+
+  This file is never part of a release APK: Gradle only merges src/debug when
+  assembling a debug variant, so `flutter build apk -release` still gets the
+  HTTPS-only config from src/main.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

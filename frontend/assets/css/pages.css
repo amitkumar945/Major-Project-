@@ -18,10 +18,18 @@
 .landing {
   --dsvv:        #4F24A8;  /* primary purple   */
   --dsvv-dark:   #35147A;  /* dark purple      */
+  --dsvv-mid:    #6D3FD1;  /* lighter purple, used in gradients */
   --dsvv-light:  #F4F0FF;  /* light purple     */
+  --dsvv-tint:   #FAF8FF;  /* barely-there purple wash */
   --dsvv-ink:    #17213A;  /* dark text        */
   --dsvv-muted:  #667085;  /* secondary text   */
   --dsvv-line:   #E5E7EB;  /* border           */
+
+  /* Purple-tinted elevation, so shadows read as part of the brand rather
+     than a neutral grey drop. */
+  --dsvv-shadow-sm: 0 1px 2px rgb(23 33 58 / .05), 0 2px 8px -4px rgb(79 36 168 / .12);
+  --dsvv-shadow-md: 0 4px 12px -6px rgb(23 33 58 / .12), 0 12px 32px -20px rgb(79 36 168 / .35);
+  --dsvv-shadow-lg: 0 8px 20px -10px rgb(23 33 58 / .14), 0 24px 48px -28px rgb(79 36 168 / .45);
 }
 
 /*
@@ -44,6 +52,9 @@
 .landing h2,
 .landing h3 { color: var(--dsvv-ink); letter-spacing: -.02em; }
 
+/* Nothing on this page may cause a sideways scroll on a phone. */
+.page-landing { overflow-x: hidden; }
+
 /* ------------------------------------------------ landing button styles - */
 
 .landing .btn--primary,
@@ -57,6 +68,8 @@
 .page-landing .navbar .btn--primary:not(:disabled):hover {
   background: var(--dsvv-dark);
   border-color: var(--dsvv-dark);
+  box-shadow: 0 6px 18px -8px rgb(79 36 168 / .6);
+  transform: translateY(-1px);
 }
 
 .landing .btn--outline {
@@ -67,13 +80,47 @@
 .landing .btn--outline:not(:disabled):hover {
   background: var(--dsvv-light);
   color: var(--dsvv-dark);
+  box-shadow: 0 6px 18px -10px rgb(79 36 168 / .45);
+  transform: translateY(-1px);
 }
+
+.landing .btn { transition: background var(--t-base), border-color var(--t-base),
+                            color var(--t-base), box-shadow var(--t-base),
+                            transform var(--t-base); }
 
 .landing a:not(.btn):hover { color: var(--dsvv-dark); }
 
+/* A clearly visible focus ring in the brand colour, on every interactive
+   element of the page. */
+.landing a:focus-visible,
+.landing button:focus-visible,
+.landing input:focus-visible,
+.page-landing .navbar a:focus-visible,
+.page-landing .navbar button:focus-visible,
+.page-landing .footer a:focus-visible {
+  outline: 3px solid var(--dsvv);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.page-landing .footer a:focus-visible,
+.final-cta a:focus-visible { outline-color: #fff; }
+
+/* Users who prefer reduced motion get no movement at all. */
+@media (prefers-reduced-motion: reduce) {
+  .landing *,
+  .page-landing .navbar * { transition: none !important; }
+  .landing .btn:hover,
+  .landing .dept-card:hover,
+  .landing .highlight:hover { transform: none !important; }
+}
+
 /* ---------------------------------------------------- navbar on landing - */
 
-.page-landing .navbar { background: #fff; border-bottom: 1px solid var(--dsvv-line); }
+.page-landing .navbar {
+  background: rgb(255 255 255 / .88);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--dsvv-line);
+}
 
 .page-landing .navbar__link {
   color: var(--dsvv-ink);
@@ -92,13 +139,31 @@
 .page-landing .navbar .btn--ghost { color: var(--dsvv-ink); }
 .page-landing .navbar .btn--ghost:hover { background: var(--dsvv-light); color: var(--dsvv); }
 
+/* Touch-friendly tap targets in the mobile menu. */
+@media (max-width: 900px) {
+  .page-landing .navbar__mobile .navbar__link {
+    min-height: var(--tap);
+    display: flex;
+    align-items: center;
+    font-size: var(--fs-md);
+  }
+  .page-landing .navbar__mobile .btn {
+    min-height: var(--tap);
+    font-size: var(--fs-base);
+  }
+}
+
 /* ================================================================ HERO === */
 
 .hero {
   position: relative;
   overflow: hidden;
-  background: #fff;
-  padding-block: var(--sp-12) 0;
+  padding-block: var(--sp-10) var(--sp-8);
+  /* Soft purple wash behind the hero, fading into the white page. */
+  background:
+    radial-gradient(58rem 30rem at 82% -12%, rgb(109 63 209 / .13), transparent 60%),
+    radial-gradient(46rem 26rem at 4% 4%, rgb(79 36 168 / .07), transparent 62%),
+    linear-gradient(180deg, var(--dsvv-tint) 0%, #fff 68%);
 }
 
 .hero__grid {
@@ -106,33 +171,50 @@
   grid-template-columns: 1fr;
   gap: var(--sp-8);
   align-items: center;
-  justify-items: center;
   text-align: center;
+  justify-items: center;
 }
 
 .hero__title {
-  font-size: clamp(2.125rem, 1.4rem + 3.4vw, 3.5rem);
-  line-height: 1.08;
+  font-size: clamp(2rem, 1.25rem + 3.4vw, 3.375rem);
+  line-height: 1.1;
   font-weight: 700;
   letter-spacing: -.03em;
   text-wrap: balance;
 }
 
 /* The second line carries the purple. */
-.hero__title-accent { color: var(--dsvv); display: block; }
+.hero__title-accent {
+  display: block;
+  background: linear-gradient(92deg, var(--dsvv) 0%, var(--dsvv-mid) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Older engines without background-clip:text still need readable colour. */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero__title-accent { color: var(--dsvv); background: none; }
+}
 
 .hero__lead {
-  margin-top: var(--sp-5);
+  margin-top: var(--sp-4);
   font-size: var(--fs-md);
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--dsvv-muted);
-  max-width: 46ch;
+  max-width: 52ch;
   margin-inline: auto;
 }
 
-.hero__cta { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--sp-3); margin-top: var(--sp-8); }
+.hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-6);
+}
 
-.hero__cta .btn { padding: .8125rem 1.5rem; }
+.hero__cta .btn { padding: .8125rem 1.5rem; min-height: var(--tap); }
 
 /* Simple • Transparent • Trackable pill */
 .hero__trust {
@@ -140,50 +222,251 @@
   align-items: center;
   gap: var(--sp-3);
   flex-wrap: wrap;
-  margin-top: var(--sp-8);
-  padding: .625rem 1.125rem;
+  margin-top: var(--sp-5);
+  padding: .5rem 1.125rem;
   border-radius: var(--r-full);
   background: #ecfdf3;
-  color: #16794c;
-  font-size: var(--fs-base);
-  font-weight: 500;
+  color: #15683f;
+  font-size: var(--fs-sm);
+  font-weight: 600;
 }
-.hero__trust .icon { color: #16a34a; }
-.hero__trust-sep { color: #86c9a6; }
+.hero__trust .icon { color: #15803d; }
+.hero__trust-sep { color: #7cbfa0; }
 
+/* ------------------------------------------------- hero illustration ---- */
+
+.hero__art {
+  position: relative;
+  width: 100%;
+  max-width: 30rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Decorative blurred blobs behind the card. */
+.hero__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(46px);
+  z-index: 0;
+  pointer-events: none;
+}
+.hero__blob--a {
+  width: 15rem; height: 15rem;
+  background: rgb(109 63 209 / .28);
+  top: -3rem; right: -2rem;
+}
+.hero__blob--b {
+  width: 12rem; height: 12rem;
+  background: rgb(249 115 22 / .16);
+  bottom: -3rem; left: -2rem;
+}
+
+/* --------------------------------------------------- campus photograph ---
+   The aerial campus shot sits behind the mock complaint card. If the file is
+   ever missing, `is-missing` collapses the figure and the card falls back to
+   the blob-only layout it had before — never a broken-image icon.
+   ------------------------------------------------------------------------ */
+
+.hero-photo {
+  position: relative;
+  z-index: 1;
+  margin: 0 0 var(--sp-4);
+  width: 100%;
+  border-radius: var(--radius-lg, 16px);
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgb(16 24 40 / .18), 0 2px 6px rgb(16 24 40 / .08);
+  background: var(--slate-200);
+  aspect-ratio: 16 / 10;
+}
+
+.hero-photo__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hero-photo.is-missing { display: none; }
+
+/* The mock complaint card. */
+.hero-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: #fff;
+  border: 1px solid var(--dsvv-line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--dsvv-shadow-lg);
+  text-align: left;
+}
+
+.hero-card__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-soft);
+}
+.hero-card__dot {
+  width: .5rem; height: .5rem;
+  border-radius: 50%;
+  background: var(--slate-200);
+  flex: none;
+}
+.hero-card__ref {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--dsvv-muted);
+  letter-spacing: -.01em;
+}
+
+.hero-card__row { display: flex; align-items: center; gap: var(--sp-3); }
+
+.hero-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem; height: 2.5rem;
+  border-radius: var(--r-md);
+  flex: none;
+}
+.hero-card__icon .icon { width: 1.25rem; height: 1.25rem; }
+.hero-card__icon--water { background: #e8f2fe; color: #1d74d0; }
+
+.hero-card__meta { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
+.hero-card__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--dsvv-ink);
+  line-height: 1.35;
+}
+.hero-card__sub { font-size: var(--fs-xs); color: var(--dsvv-muted); }
+
+.hero-card__badge {
+  margin-left: auto;
+  flex: none;
+  padding: .25rem .625rem;
+  border-radius: var(--r-full);
+  background: #fff7e6;
+  color: #a3620a;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Four-step progress rail inside the card. */
+.hero-card__track { display: flex; align-items: center; gap: .25rem; }
+
+.hero-card__step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem; height: 1.75rem;
+  border-radius: 50%;
+  background: var(--slate-100);
+  color: var(--slate-400);
+  border: 2px solid transparent;
+  flex: none;
+}
+.hero-card__step .icon { width: .875rem; height: .875rem; }
+.hero-card__step.is-done { background: #e6f7ed; color: #128a4d; }
+.hero-card__step.is-active {
+  background: var(--dsvv-light);
+  color: var(--dsvv);
+  border-color: var(--dsvv);
+}
+
+.hero-card__line { flex: 1; height: 2px; background: var(--slate-200); border-radius: 2px; }
+.hero-card__line.is-done { background: #7fd0a4; }
+
+.hero-card__foot { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.hero-card__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  padding: .3125rem .625rem;
+  border-radius: var(--r-full);
+  background: var(--dsvv-light);
+  color: var(--dsvv);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.hero-card__chip .icon { width: .875rem; height: .875rem; }
+
+/* Two columns once there is room: copy left, illustration right. */
 @media (min-width: 960px) {
-  .hero { padding-block: var(--sp-12) var(--sp-8); }
+  .hero { padding-block: var(--sp-12) var(--sp-10); }
+  .hero__grid {
+    grid-template-columns: 1.05fr .95fr;
+    gap: var(--sp-10);
+    text-align: left;
+    justify-items: stretch;
+  }
+  .hero__lead { margin-inline: 0; }
+  .hero__cta { justify-content: flex-start; }
+  .hero__art { max-width: none; justify-self: end; }
 }
 
-/* ============================================== FEATURE HIGHLIGHT STRIP === */
+/* ============================================== FEATURE HIGHLIGHT CARDS === */
 
+/*
+   The four highlights are real cards now. `auto-fit` gives one column on a
+   phone, two on a tablet and four on a desktop without extra breakpoints.
+*/
 .highlights {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: var(--sp-4);
-  margin-top: var(--sp-8);
+  margin-top: var(--sp-10);
+  list-style: none;
+  padding: 0;
 }
 
 .highlight {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--sp-3);
-  font-size: var(--fs-base);
-  font-weight: 500;
-  color: var(--dsvv-ink);
+  padding: var(--sp-5);
+  background: #fff;
+  border: 1px solid var(--dsvv-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--dsvv-shadow-sm);
+  transition: transform var(--t-base), box-shadow var(--t-base), border-color var(--t-base);
+}
+.highlight:hover {
+  transform: translateY(-3px);
+  border-color: var(--dsvv);
+  box-shadow: var(--dsvv-shadow-md);
 }
 
 .highlight__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: var(--r-md);
   background: var(--dsvv-light);
   color: var(--dsvv);
   flex: none;
 }
+
+.highlight__body { display: flex; flex-direction: column; gap: .25rem; }
+.highlight__title {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--dsvv-ink);
+  line-height: 1.35;
+}
+.highlight__text { font-size: var(--fs-sm); color: var(--dsvv-muted); line-height: 1.5; }
 
 /* ============================================= SHARED SECTION HEADINGS === */
 /* Also used by the public tracking page (pages/track.js), not landing-only. */
@@ -207,12 +490,12 @@
 /* ======================================================== HOW IT WORKS === */
 
 .landing .section { padding-block: var(--sp-12); }
-.landing .section--alt { background: var(--dsvv-light); }
+.landing .section--alt { background: var(--dsvv-tint); }
 .landing .section__eyebrow { color: var(--dsvv); }
 
 .landing .section__head { margin-bottom: var(--sp-8); }
-.landing .section__title { font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2rem); font-weight: 700; }
-.landing .section__lead { color: var(--dsvv-muted); }
+.landing .section__title { font-size: clamp(1.625rem, 1.2rem + 1.5vw, 2.125rem); font-weight: 700; }
+.landing .section__lead { color: var(--dsvv-muted); margin-top: var(--sp-2); }
 
 /* Section heading with the small icon and rule, as in the reference. */
 .section__label {
@@ -239,10 +522,16 @@
   background: #fff;
   border: 1px solid var(--dsvv-line);
   border-radius: var(--r-xl);
-  box-shadow: 0 8px 24px -18px rgb(23 33 58 / .25);
+  box-shadow: var(--dsvv-shadow-md);
+  list-style: none;
 }
 
-.process__step { display: flex; align-items: flex-start; gap: var(--sp-4); }
+.process__step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  transition: transform var(--t-base);
+}
 
 .process__icon {
   display: inline-flex;
@@ -254,17 +543,20 @@
   background: var(--dsvv-light);
   color: var(--dsvv);
   flex: none;
+  transition: background var(--t-base), color var(--t-base);
 }
 .process__icon .icon { width: 1.5rem; height: 1.5rem; }
+
+.process__step:hover .process__icon { background: var(--dsvv); color: #fff; }
 
 .process__num {
   font-size: var(--fs-base);
   font-weight: 700;
   color: var(--dsvv-ink);
 }
-.process__text { margin-top: .25rem; font-size: var(--fs-sm); color: var(--dsvv-muted); }
+.process__text { margin-top: .25rem; font-size: var(--fs-sm); color: var(--dsvv-muted); line-height: 1.5; }
 
-/* Connector arrow: horizontal on desktop, rotated when the steps stack. */
+/* Connector arrow: horizontal on desktop, hidden when the steps stack. */
 .process__arrow {
   display: none;
   align-self: center;
@@ -275,10 +567,80 @@
 @media (min-width: 980px) {
   .process {
     grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
-    align-items: center;
+    align-items: start;
     gap: var(--sp-4);
+    padding: var(--sp-8);
   }
-  .process__arrow { display: inline-flex; }
+  .process__step { flex-direction: column; align-items: center; text-align: center; gap: var(--sp-3); }
+  .process__arrow { display: inline-flex; margin-top: 1.5rem; }
+}
+
+/* ========================================== TRACK COMPLAINT QUICK ACTION === */
+
+.track-cta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  background: #fff;
+  border: 1px solid var(--dsvv-line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--dsvv-shadow-md);
+}
+
+.track-cta__copy { display: flex; align-items: flex-start; gap: var(--sp-4); }
+
+.track-cta__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem; height: 3rem;
+  border-radius: var(--r-lg);
+  background: var(--dsvv-light);
+  color: var(--dsvv);
+  flex: none;
+}
+.track-cta__icon .icon { width: 1.5rem; height: 1.5rem; }
+
+.track-cta__title { font-size: var(--fs-xl); font-weight: 700; }
+.track-cta__text {
+  margin-top: var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--dsvv-muted);
+  line-height: 1.55;
+  max-width: 52ch;
+}
+
+.track-cta__form { display: flex; flex-direction: column; gap: var(--sp-3); }
+.track-cta__field { flex: 1; min-width: 0; }
+
+.track-cta__label {
+  display: block;
+  margin-bottom: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--dsvv-ink);
+}
+
+.track-cta__form .field__control { min-height: var(--tap); }
+.track-cta__form .field__control:focus {
+  border-color: var(--dsvv);
+  box-shadow: 0 0 0 3px rgb(79 36 168 / .16);
+}
+.track-cta__submit { min-height: var(--tap); }
+
+/* Side by side once there is room; the button aligns with the input. */
+@media (min-width: 720px) {
+  .track-cta {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-8);
+    padding: var(--sp-8);
+  }
+  .track-cta__copy { flex: 1; }
+  .track-cta__form { flex-direction: row; align-items: flex-end; flex: 1; max-width: 32rem; }
+  .track-cta__submit { flex: none; }
 }
 
 /* =============================================== DEPARTMENTS + BENEFITS === */
@@ -323,13 +685,13 @@
   background: #fff;
   border: 1px solid var(--dsvv-line);
   border-radius: var(--r-lg);
-  box-shadow: none;
+  box-shadow: var(--dsvv-shadow-sm);
   transition: box-shadow var(--t-base), transform var(--t-base), border-color var(--t-base);
 }
 .landing .dept-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   border-color: var(--dsvv);
-  box-shadow: 0 12px 28px -20px rgb(79 36 168 / .5);
+  box-shadow: var(--dsvv-shadow-md);
 }
 
 .landing .dept-card__icon {
@@ -344,8 +706,8 @@
 .landing .dept-card__icon .icon { width: 1.375rem; height: 1.375rem; }
 
 .dept-card__icon--water { background: #e8f2fe; color: #1d74d0; }
-.dept-card__icon--power { background: #fff5da; color: #c07f06; }
-.dept-card__icon--build { background: #ffeee2; color: #c2551b; }
+.dept-card__icon--power { background: #fff5da; color: #a3700a; }
+.dept-card__icon--build { background: #ffeee2; color: #b34d18; }
 .dept-card__icon--lab   { background: #efe9fe; color: var(--dsvv); }
 
 .landing .dept-card__name { font-size: var(--fs-md); font-weight: 600; }
@@ -354,6 +716,7 @@
   color: var(--dsvv-muted);
   font-weight: 400;
   margin-top: .125rem;
+  line-height: 1.5;
 }
 
 /* pushes the link to the bottom so every card is the same height */
@@ -366,6 +729,11 @@
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--dsvv);
+  min-height: 1.75rem;
+  /* Keep "File Complaint" on one line: wrapping it leaves a ragged gap
+     between the card text and the link once the cards stretch to a
+     shared height. */
+  white-space: nowrap;
 }
 .dept-card__link .icon { transition: transform var(--t-fast); }
 .dept-card__link:hover .icon { transform: translateX(3px); }
@@ -375,11 +743,12 @@
 .benefits {
   display: grid;
   grid-template-columns: 1fr;
-  gap: var(--sp-4) var(--sp-5);
-  padding: var(--sp-5);
+  gap: var(--sp-5);
+  padding: var(--sp-6);
   background: #fff;
   border: 1px solid var(--dsvv-line);
   border-radius: var(--r-xl);
+  box-shadow: var(--dsvv-shadow-sm);
 }
 
 /* Two-up as soon as there is room, matching the reference's 2×2 block. */
@@ -400,10 +769,10 @@
 }
 .benefit__icon .icon { width: 1.25rem; height: 1.25rem; }
 
-.benefit__icon--ai    { background: #e6f7ed; color: #128a4d; }
+.benefit__icon--ai    { background: #e6f7ed; color: #0f7a44; }
 .benefit__icon--photo { background: #e8f2fe; color: #1d74d0; }
 .benefit__icon--track { background: #efe9fe; color: var(--dsvv); }
-.benefit__icon--star  { background: #fff3e2; color: #c2751b; }
+.benefit__icon--star  { background: #fff3e2; color: #a8620f; }
 
 .benefit__title { font-size: var(--fs-base); font-weight: 600; color: var(--dsvv-ink); }
 .benefit__text  { margin-top: .125rem; font-size: var(--fs-sm); color: var(--dsvv-muted); line-height: 1.55; }
@@ -411,7 +780,7 @@
 /* ------------------------------------------------ view all departments -- */
 
 .dept-more { display: flex; justify-content: center; margin-top: var(--sp-6); }
-.dept-more .btn { gap: var(--sp-2); }
+.dept-more .btn { gap: var(--sp-2); min-height: var(--tap); }
 .dept-more .btn .icon { transition: transform var(--t-fast); }
 .dept-more .btn:hover .icon { transform: translateX(3px); }
 
@@ -447,12 +816,84 @@
 .landing .faq__item {
   border: 1px solid var(--dsvv-line);
   border-radius: var(--r-lg);
-  box-shadow: none;
+  background: #fff;
+  box-shadow: var(--dsvv-shadow-sm);
+  transition: border-color var(--t-base), box-shadow var(--t-base);
 }
-.landing .faq__q { font-weight: 500; color: var(--dsvv-ink); }
+.landing .faq__item:hover { border-color: var(--dsvv-200, #cdbdf3); }
+.landing .faq__item:has(.faq__q[aria-expanded='true']) {
+  border-color: var(--dsvv);
+  box-shadow: var(--dsvv-shadow-md);
+}
+.landing .faq__q { font-weight: 600; color: var(--dsvv-ink); min-height: var(--tap); }
 .landing .faq__q:hover { color: var(--dsvv); }
 .landing .faq__q .icon { color: var(--dsvv); }
-.landing .faq__a { color: var(--dsvv-muted); }
+.landing .faq__a { color: var(--dsvv-muted); line-height: 1.6; }
+
+/* ========================================================== FINAL CTA === */
+
+.final-cta {
+  padding-block: var(--sp-12);
+  background:
+    radial-gradient(38rem 22rem at 15% 0%, rgb(255 255 255 / .16), transparent 60%),
+    linear-gradient(135deg, var(--dsvv) 0%, var(--dsvv-dark) 100%);
+}
+
+.final-cta__inner { text-align: center; max-width: 46rem; margin-inline: auto; }
+
+.final-cta__title {
+  font-size: clamp(1.5rem, 1.15rem + 1.6vw, 2.125rem);
+  font-weight: 700;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+/* Overrides the `.landing h2` ink colour on the purple panel. */
+.landing .final-cta__title { color: #fff; }
+
+.final-cta__text {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+  color: rgb(255 255 255 / .86);
+  max-width: 46ch;
+  margin-inline: auto;
+}
+
+.final-cta__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-6);
+}
+
+/* White button on the purple panel, and its outlined companion. */
+.landing .final-cta__btn {
+  min-height: var(--tap);
+  padding: .8125rem 1.5rem;
+  background: #fff;
+  border: 1px solid #fff;
+  color: var(--dsvv);
+  font-weight: 600;
+}
+.landing .final-cta__btn:not(:disabled):hover {
+  background: var(--dsvv-light);
+  border-color: var(--dsvv-light);
+  color: var(--dsvv-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px -10px rgb(0 0 0 / .45);
+}
+
+.landing .final-cta__btn--ghost {
+  background: transparent;
+  border-color: rgb(255 255 255 / .55);
+  color: #fff;
+}
+.landing .final-cta__btn--ghost:not(:disabled):hover {
+  background: rgb(255 255 255 / .12);
+  border-color: #fff;
+  color: #fff;
+}
 
 /* ================================================== FOOTER ON LANDING === */
 
@@ -461,7 +902,8 @@
   color: rgb(255 255 255 / .78);
 }
 .page-landing .footer__grid { border-bottom-color: rgb(255 255 255 / .14); }
-.page-landing .footer__list a { color: rgb(255 255 255 / .78); }
+.page-landing .footer__heading { color: #fff; }
+.page-landing .footer__list a { color: rgb(255 255 255 / .78); transition: color var(--t-fast); }
 .page-landing .footer__list a:hover { color: #fff; }
 .page-landing .footer__item .icon { color: rgb(255 255 255 / .6); }
 .page-landing .footer__bottom { justify-content: center; text-align: center; }
@@ -475,13 +917,45 @@
   font-size: var(--fs-base);
 }
 
+/* Comfortable tap targets for the footer links on a phone. */
+@media (max-width: 720px) {
+  .page-landing .footer__list a,
+  .page-landing .footer__item a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.25rem;
+  }
+}
+
 /* ===================================================== MOTION / MOBILE === */
 
 @media (max-width: 620px) {
+  .landing .section { padding-block: var(--sp-10); }
+  .hero { padding-block: var(--sp-8) var(--sp-6); }
+
   .hero__cta { flex-direction: column; align-items: stretch; }
   .hero__cta .btn { width: 100%; }
   .hero__trust { width: 100%; justify-content: center; }
+
+  /* Full-width, app-like buttons on a phone. */
+  .final-cta__actions { flex-direction: column; align-items: stretch; }
+  .landing .final-cta__btn { width: 100%; }
+  .dept-more .btn { width: 100%; justify-content: center; }
+  .track-cta__submit { width: 100%; justify-content: center; }
+
+  .process { padding: var(--sp-6) var(--sp-5); }
+  .track-cta { padding: var(--sp-5); }
+  .benefits { padding: var(--sp-5); }
+  .highlight { padding: var(--sp-4); }
+
+  /* Slightly tighter headline so a long word never forces a sideways scroll. */
+  .hero__title { font-size: clamp(1.875rem, 1.1rem + 4.4vw, 2.5rem); }
+  .track-cta__copy { gap: var(--sp-3); }
 }
+
+/* Long reference numbers and titles wrap instead of widening the page. */
+.landing { overflow-wrap: break-word; }
+.hero-card__ref { overflow-wrap: anywhere; }
 
 /*
    Sections ease in as they scroll into view.
@@ -654,6 +1128,111 @@
 .gallery__media img { width: 100%; height: 100%; object-fit: cover; }
 .gallery__kind { font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .gallery__foot { padding: .625rem; }
+
+/* ==================================================== LOCATION PICKER === */
+/*
+   Geo-tagging step of the complaint form (components/locationPicker.js).
+
+   The latitude / longitude number inputs were removed from this step: students
+   do not think in decimal degrees and were unsure whether the fields had to be
+   filled in by hand. The coordinates are still captured, validated and
+   submitted - they are just presented as a status line and the map preview
+   instead of as something to type.
+*/
+
+.locpick { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+/* ---- the single call to action ---- */
+
+.locpick__capture {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  background: var(--brand-50);
+  border: 1px solid var(--brand-200);
+  border-radius: var(--r-lg);
+}
+
+.locpick__capture-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--r-md);
+  background: #fff;
+  color: var(--brand-600);
+  flex: none;
+}
+
+.locpick__capture-copy { flex: 1 1 14rem; min-width: 0; }
+
+.locpick__capture-title { font-weight: 600; color: var(--heading); font-size: var(--fs-md); }
+.locpick__capture-text {
+  margin-top: .25rem;
+  font-size: var(--fs-sm);
+  color: var(--slate-600);
+  line-height: 1.55;
+}
+
+.locpick__btn { flex: none; min-height: var(--tap); }
+
+/* ---- what we found, in words ---- */
+
+.locpick__state {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-alt);
+}
+
+.locpick__state-icon { flex: none; color: var(--text-muted); margin-top: 1px; }
+.locpick__state-title { font-weight: 600; color: var(--heading); font-size: var(--fs-base); }
+.locpick__state-text {
+  margin-top: .125rem;
+  font-size: var(--fs-sm);
+  color: var(--slate-600);
+  line-height: 1.55;
+}
+
+.locpick__state--ok {
+  background: var(--green-50);
+  border-color: var(--green-100);
+}
+.locpick__state--ok .locpick__state-icon { color: var(--green-600); }
+
+.locpick__state--warn {
+  background: var(--amber-50);
+  border-color: var(--amber-100);
+}
+.locpick__state--warn .locpick__state-icon { color: var(--amber-600); }
+
+/* Validation failure on the captured point lands on the status block, since
+   the latitude field it used to attach to no longer exists. */
+.locpick__status--error .locpick__state {
+  border-color: var(--red-500);
+  background: var(--red-50);
+}
+.locpick__status--error .locpick__state-icon { color: var(--red-600); }
+.locpick__status--error .field__error { margin-top: var(--sp-2); }
+
+/* ---- phone layout: stack, and let the button span the width ---- */
+
+@media (max-width: 640px) {
+  .locpick__capture {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+  }
+  .locpick__btn { width: 100%; justify-content: center; }
+  .locpick__capture-copy { flex-basis: auto; }
+}
 
 /* ================================================================= MAP === */
 

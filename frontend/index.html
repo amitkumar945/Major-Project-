@@ -18,6 +18,17 @@
   <link rel="stylesheet" href="/assets/css/components.css">
   <link rel="stylesheet" href="/assets/css/layout.css">
   <link rel="stylesheet" href="/assets/css/pages.css">
+  <!-- Loaded last: mobile/PWA polish layered over the sheets above. -->
+  <link rel="stylesheet" href="/assets/css/mobile.css">
+  <!-- PWA: installable on Android, with an offline-capable app shell. -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#4338ca">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DSVV Grievance">
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+  <script src="/assets/js/pwa.js" defer></script>
 </head>
 <body class="page-landing">
   <!-- ==================================================================
@@ -66,12 +77,14 @@
 
             <div class="hero__copy">
               <h1 class="hero__title">
-                DSVV
-                <span class="hero__title-accent">GRIEVANCE</span>
+                Report Campus Issues.
+                <span class="hero__title-accent">Get Them Resolved.</span>
               </h1>
 
               <p class="hero__lead">
-                Report campus issues quickly and track every step until resolution.
+                One window for water, electricity, building and computer lab complaints at Dev
+                Sanskriti Vishwavidyalaya. Raise an issue in minutes and follow every step until
+                it is resolved.
               </p>
 
               <div class="hero__cta">
@@ -95,35 +108,112 @@
               </p>
             </div>
 
+            <!-- The campus photograph, with a complaint card moving through
+                 the pipeline overlaid on it. The photo is decorative framing;
+                 the card is built from the project's own markup and icon
+                 sprite, so it inherits the DSVV palette. -->
+            <div class="hero__art" aria-hidden="true">
+              <figure class="hero-photo">
+                <img class="hero-photo__img"
+                     src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSDI4fxdJGYWZIYZqHOWg3jS4upiEiU0w0gVDTI0k-ePA&s=100"
+                     alt="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQUQmkDytYmkvzWIdY5mfe33VBjrsRHOB4aOnhFbYZTGA&s=10"
+                     width="1600" height="1600"
+                     decoding="async" fetchpriority="high"
+                     onerror="this.closest('.hero-photo').classList.add('is-missing')">
+              </figure>
+
+              <div class="hero-card">
+                <div class="hero-card__bar">
+                  <span class="hero-card__dot"></span>
+                  <span class="hero-card__dot"></span>
+                  <span class="hero-card__dot"></span>
+                  <span class="hero-card__ref">DSVV-GRV-2026-00101</span>
+                </div>
+
+                <div class="hero-card__row">
+                  <span class="hero-card__icon hero-card__icon--water">
+                    <svg class="icon"><use href="/assets/icons.svg#droplet"></use></svg>
+                  </span>
+                  <span class="hero-card__meta">
+                    <span class="hero-card__title">Water leakage near Hostel Block C</span>
+                    <span class="hero-card__sub">Jal Kal Vibhag &bull; auto-routed</span>
+                  </span>
+                  <span class="hero-card__badge">In Progress</span>
+                </div>
+
+                <div class="hero-card__track">
+                  <span class="hero-card__step is-done">
+                    <svg class="icon icon-sm"><use href="/assets/icons.svg#check"></use></svg>
+                  </span>
+                  <span class="hero-card__line is-done"></span>
+                  <span class="hero-card__step is-done">
+                    <svg class="icon icon-sm"><use href="/assets/icons.svg#check"></use></svg>
+                  </span>
+                  <span class="hero-card__line is-done"></span>
+                  <span class="hero-card__step is-active">
+                    <svg class="icon icon-sm"><use href="/assets/icons.svg#user-check"></use></svg>
+                  </span>
+                  <span class="hero-card__line"></span>
+                  <span class="hero-card__step"></span>
+                </div>
+
+                <div class="hero-card__foot">
+                  <span class="hero-card__chip">
+                    <svg class="icon icon-sm"><use href="/assets/icons.svg#map-pin"></use></svg>
+                    Geo-tagged
+                  </span>
+                  <span class="hero-card__chip">
+                    <svg class="icon icon-sm"><use href="/assets/icons.svg#cpu"></use></svg>
+                    AI routed
+                  </span>
+                </div>
+              </div>
+
+              <span class="hero__blob hero__blob--a"></span>
+              <span class="hero__blob hero__blob--b"></span>
+            </div>
+
           </div>
 
           <!-- ============================================ FEATURE HIGHLIGHTS -->
-          <div class="highlights">
-            <div class="highlight">
+          <ul class="highlights">
+            <li class="highlight">
               <span class="highlight__icon">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#cpu"></use></svg>
               </span>
-              AI-Assisted Routing
-            </div>
-            <div class="highlight">
+              <span class="highlight__body">
+                <span class="highlight__title">AI-Assisted Routing</span>
+                <span class="highlight__text">Sent to the right department automatically.</span>
+              </span>
+            </li>
+            <li class="highlight">
               <span class="highlight__icon">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#map-pin"></use></svg>
               </span>
-              Geo-tag Support
-            </div>
-            <div class="highlight">
+              <span class="highlight__body">
+                <span class="highlight__title">Geo-tag Support</span>
+                <span class="highlight__text">Pin the exact spot on the campus map.</span>
+              </span>
+            </li>
+            <li class="highlight">
               <span class="highlight__icon">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#refresh"></use></svg>
               </span>
-              Real-time Updates
-            </div>
-            <div class="highlight">
+              <span class="highlight__body">
+                <span class="highlight__title">Real-time Updates</span>
+                <span class="highlight__text">See each status change as it happens.</span>
+              </span>
+            </li>
+            <li class="highlight">
               <span class="highlight__icon">
                 <svg class="icon icon-sm" aria-hidden="true"><use href="/assets/icons.svg#shield-check"></use></svg>
               </span>
-              Secure &amp; Transparent
-            </div>
-          </div>
+              <span class="highlight__body">
+                <span class="highlight__title">Secure &amp; Transparent</span>
+                <span class="highlight__text">Only you and the officer see the details.</span>
+              </span>
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -131,7 +221,9 @@
       <section class="section" id="how">
         <div class="container">
           <div class="section__head">
+            <p class="section__eyebrow">The process</p>
             <h2 class="section__title">How It Works</h2>
+            <p class="section__lead">From submission to resolution in four tracked steps.</p>
           </div>
 
           <ol class="process reveal">
@@ -152,7 +244,7 @@
                 <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#cpu"></use></svg>
               </span>
               <div>
-                <p class="process__num">02. Smart Routing</p>
+                <p class="process__num">02. AI Classification</p>
                 <p class="process__text">AI system assigns the complaint to the right department.</p>
               </div>
             </li>
@@ -164,7 +256,7 @@
                 <svg class="icon" aria-hidden="true"><use href="/assets/icons.svg#user-check"></use></svg>
               </span>
               <div>
-                <p class="process__num">03. Officer Action</p>
+                <p class="process__num">03. Officer Assignment</p>
                 <p class="process__text">Concerned officer works on your issue.</p>
               </div>
             </li>
@@ -184,8 +276,50 @@
         </div>
       </section>
 
+      <!-- ============================================= TRACK QUICK ACTION -->
+      <section class="section section--alt" id="track">
+        <div class="container">
+          <div class="track-cta reveal">
+            <div class="track-cta__copy">
+              <span class="track-cta__icon" aria-hidden="true">
+                <svg class="icon"><use href="/assets/icons.svg#file-search"></use></svg>
+              </span>
+              <div>
+                <h2 class="track-cta__title">Track Your Complaint</h2>
+                <p class="track-cta__text">
+                  Already filed one? Enter your reference number to see exactly where it has reached.
+                </p>
+              </div>
+            </div>
+
+            <!--
+              Plain GET form pointing at the existing tracking page.
+              `pages/track.js` already reads the `id` query parameter and runs
+              the lookup automatically, so this needs no JavaScript of its own
+              and touches no API.
+            -->
+            <form class="track-cta__form" action="/track.html" method="get">
+              <div class="track-cta__field">
+                <label class="track-cta__label" for="track-ref">Complaint reference number</label>
+                <div class="field__wrap">
+                  <span class="icon-left" aria-hidden="true">
+                    <svg class="icon icon-sm"><use href="/assets/icons.svg#file-search"></use></svg>
+                  </span>
+                  <input type="text" class="field__control mono" id="track-ref" name="id"
+                         placeholder="DSVV-GRV-2026-00101" autocomplete="off" spellcheck="false">
+                </div>
+              </div>
+              <button type="submit" class="btn btn--primary btn--lg track-cta__submit">
+                <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#search"></use></svg>
+                Track
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
       <!-- =============================== DEPARTMENTS + WHY USE THIS PORTAL -->
-      <section class="section section--alt" id="departments">
+      <section class="section" id="departments">
         <div class="container">
           <div class="split">
 
@@ -318,9 +452,10 @@
       </section>
 
       <!-- ============================================================= FAQ -->
-      <section class="section" id="faq">
+      <section class="section section--alt" id="faq">
         <div class="container">
           <div class="section__head">
+            <p class="section__eyebrow">Questions</p>
             <h2 class="section__title">Common Questions</h2>
           </div>
 
@@ -408,6 +543,29 @@
                 file your own if the details differ.
               </div>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================== FINAL CTA -->
+      <section class="final-cta">
+        <div class="container">
+          <div class="final-cta__inner reveal">
+            <h2 class="final-cta__title">Have a campus issue? Report it now.</h2>
+            <p class="final-cta__text">
+              It takes a couple of minutes. You get a reference number straight away and can follow
+              the progress until the issue is closed.
+            </p>
+            <div class="final-cta__actions">
+              <a class="btn btn--lg final-cta__btn" href="/register.html">
+                <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#file-plus"></use></svg>
+                Register a Complaint
+              </a>
+              <a class="btn btn--lg final-cta__btn final-cta__btn--ghost" href="/track.html">
+                <svg class="icon icon-md" aria-hidden="true"><use href="/assets/icons.svg#search"></use></svg>
+                Track Complaint
+              </a>
+            </div>
           </div>
         </div>
       </section>

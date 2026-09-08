@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release config: HTTPS only.
+
+  Applied to the release build via the manifest. A release APK refuses all
+  cleartext traffic, so tokens can never be sent over plain HTTP no matter
+  which host the build is pointed at.
+
+  Debug builds use src/debug/res/xml/network_security_config.xml instead, which
+  permits cleartext so `flutter run` can reach the Flask dev server on
+  http://10.0.2.2:5000 or a LAN IP.
+
+  If a release build genuinely must talk to a plain-HTTP server, add that one
+  host as a <domain-config cleartextTrafficPermitted="true"> below rather than
+  relaxing the base config.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

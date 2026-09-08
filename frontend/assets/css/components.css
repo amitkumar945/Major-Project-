@@ -529,6 +529,52 @@ select.field__control {
   margin-top: var(--sp-3);
 }
 
+/* ---- collapsible filters (see components/filters.js) --------------------
+   On a phone the dropdowns hide behind one "Filters" row so the results are
+   the first thing on screen. From 720px the toggle disappears and the grid is
+   always shown, so tablets and desktops keep exactly the strip they had. */
+
+.filters__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  margin-top: var(--sp-3);
+  padding: .5rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.filters__summary:hover { background: var(--slate-50); border-color: var(--slate-300); }
+
+/* The checkbox itself is visually hidden, so the focus ring has to be drawn
+   on the label it controls to stay keyboard accessible. */
+.filters__toggle:focus-visible + .filters__summary {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+
+/* leading filter glyph, then the label, then the chevron pushed right */
+.filters__summary .icon { color: var(--text-muted); flex: none; }
+.filters__summary span { flex: 1; }
+.filters__summary .icon:last-child { transition: transform var(--t-base); }
+.filters__toggle:checked + .filters__summary .icon:last-child { transform: rotate(180deg); }
+
+/* Collapsed by default on a phone; the checkbox reveals the grid. */
+@media (max-width: 719px) {
+  .filters__toggle:not(:checked) ~ .filters__grid { display: none; }
+}
+
+@media (min-width: 720px) {
+  /* The toggle is a small-screen affordance only. */
+  .filters__summary { display: none; }
+}
+
 .search { position: relative; flex: 1; min-width: 220px; max-width: 420px; }
 .search .icon-left {
   position: absolute;

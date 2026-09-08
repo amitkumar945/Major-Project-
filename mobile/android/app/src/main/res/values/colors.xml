@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- brand-600 from the web app's tokens.css, so the native chrome matches
+         the Flutter theme. -->
+    <color name="brand">#4F46E5</color>
+    <color name="white">#FFFFFF</color>
+</resources>

@@ -8,24 +8,28 @@ once.
 
 | File | Used by | Notes |
 | ---- | ------- | ----- |
-| `dsvv-logo.svg` | header, footer, login/register aside | A neutral placeholder emblem, **not** the official DSVV crest. Square, 128×128 viewBox, drawn at 44px. |
-| `campus.svg` | decorative illustration | Simulated campus surface, not a photograph. |
+| `dsvv-logo.png` | header, footer, login/register aside | The official DSVV crest. Transparent square, 128×128 or larger; drawn at 44px. |
+| `campus.jpg` | home page hero | Aerial photograph of the DSVV campus. Landscape, ~16:10, 1600px wide or larger. |
+| `dsvv-logo.svg` | — | Superseded placeholder emblem, kept as the offline fallback reference. |
+| `campus.svg` | — | Superseded illustration, kept as a reference. |
 
-## Using the official crest
+## Replacing the artwork
 
-Replace `dsvv-logo.svg` with the real artwork and every page updates at once.
-
-If the official file is a PNG (or any other name/format), drop it in here and
-update the path in `assets/js/utils/constants.js`:
+Drop a replacement in this folder under the same name and every page updates at
+once. If you use a different name or format, update the path in
+`assets/js/utils/constants.js`:
 
 ```js
 export const ASSETS = {
   logo: '/assets/img/dsvv-logo.png',
+  campus: '/assets/img/campus.jpg',
 }
 ```
 
-A transparent square image around 128×128 or larger looks best; it is drawn at
-44px.
+The hero photo path is also written literally in `index.html` (the `<img>`
+inside `.hero-photo`), so change it there too if you rename the file.
 
-If the referenced file is ever missing, the `<img>` removes itself and a CSS
-placeholder mark shows through — never a broken-image icon.
+If a referenced file is ever missing, nothing breaks: the logo `<img>` removes
+itself and the CSS placeholder mark shows through, and the hero photo figure
+collapses so the complaint card falls back to its previous layout — never a
+broken-image icon.

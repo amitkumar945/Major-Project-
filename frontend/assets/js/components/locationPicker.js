@@ -7,8 +7,15 @@
  * the prototype must always be demonstrable.
  *
  * A real fix from outside the campus is not usable either: this is a campus
- * grievance system, so the student is told to place the pin on campus instead
- * of silently filing a complaint against their home address.
+ * grievance system, so the student is told to retry from on campus instead of
+ * silently filing a complaint against their home address.
+ *
+ * The latitude and longitude are deliberately NOT shown as editable number
+ * fields. Students filing a complaint do not think in decimal degrees, and
+ * asking them to type coordinates was the most confusing part of this step.
+ * The values are still captured, validated against the campus outline and
+ * submitted exactly as before - they are held in `location` below and simply
+ * presented as a plain-language status line plus the map preview.
  */
 
 import { esc, icon, mount, on, qs, setLoading } from './dom.js'
@@ -37,70 +44,107 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
   // Set when the device reported a real fix that fell outside the campus.
   let offCampus = false
 
-  function render() {
-    node.innerHTML = `
-      <div class="alert alert--info" style="align-items:center;flex-wrap:wrap;gap:var(--sp-4)">
-        <span class="alert__icon">${icon('map-pin', 'icon-lg')}</span>
-        <div class="grow">
-          <p class="alert__title">Tag the exact location</p>
-          <p class="alert__text">Geo-tagging helps the department reach the right spot without asking you again.</p>
-        </div>
-        <button type="button" class="btn btn--primary" data-detect>
-          ${icon('crosshair', 'icon-sm')}Use my current location
-        </button>
-      </div>
+  /**
+   * The line that replaces the old latitude / longitude inputs.
+   *
+   * It says, in ordinary words, whether we have a location yet and how good it
+   * is. The exact coordinates are still shown by the map preview underneath
+   * (`.map__coords`), so nothing is hidden from a user who wants to check -
+   * they simply are not something to be typed in any more.
+   */
+  function statusPanel(captured) {
+    if (offCampus) {
+      return `
+        <div class="locpick__state locpick__state--warn">
+          <span class="locpick__state-icon">${icon('alert-circle', 'icon-md')}</span>
+          <div>
+            <p class="locpick__state-title">You seem to be outside the campus</p>
+            <p class="locpick__state-text">
+              Complaints can only be filed for places inside DSVV. Please try again when you are at
+              the spot on campus, and describe the building below in the meantime.
+            </p>
+          </div>
+        </div>`
+    }
 
-      ${
-        offCampus
-          ? `<div class="alert alert--warning" style="margin-top:var(--sp-3)">
-              <span class="alert__icon">${icon('alert-circle', 'icon-lg')}</span>
-              <div class="grow">
-                <p class="alert__title">You are outside the DSVV campus</p>
-                <p class="alert__text">Complaints can only be filed for locations inside the campus. Move the map pin to the spot you are reporting, or type the coordinates below.</p>
-              </div>
-            </div>`
-          : ''
-      }
+    if (!captured) {
+      return `
+        <div class="locpick__state">
+          <span class="locpick__state-icon">${icon('crosshair', 'icon-md')}</span>
+          <div>
+            <p class="locpick__state-title">No location added yet</p>
+            <p class="locpick__state-text">
+              Use the button above, or just describe the building below - that alone is enough to
+              file the complaint.
+            </p>
+          </div>
+        </div>`
+    }
 
-      ${
-        source && !offCampus
-          ? `<p class="muted" style="margin-top:var(--sp-3)">${
+    const accuracyNote = location.accuracy
+      ? `Accurate to about ${location.accuracy} m.`
+      : 'Pinned on the campus map.'
+
+    return `
+      <div class="locpick__state locpick__state--ok">
+        <span class="locpick__state-icon">${icon('check-circle', 'icon-md')}</span>
+        <div>
+          <p class="locpick__state-title">Location added</p>
+          <p class="locpick__state-text">
+            ${
               source === 'device'
-                ? 'Location captured from your device GPS.'
-                : 'Device location was not available, so a simulated campus location has been used for this prototype.'
-            }</p>`
-          : ''
-      }
-
-      <div class="grid grid-2" style="margin-top:var(--sp-5)">
-        <div class="field" data-field="latitude">
-          <label class="field__label" for="loc-lat">Latitude</label>
-          <input type="number" step="0.000001" class="field__control" id="loc-lat" data-lat
-                 value="${location.latitude ?? ''}" placeholder="29.999650">
+                ? `Picked up from your device. ${accuracyNote}`
+                : `Your device location was not available, so a campus location has been used. ${accuracyNote}`
+            }
+          </p>
         </div>
-        <div class="field" data-field="longitude">
-          <label class="field__label" for="loc-lng">Longitude</label>
-          <input type="number" step="0.000001" class="field__control" id="loc-lng" data-lng
-                 value="${location.longitude ?? ''}" placeholder="78.194600">
+      </div>`
+  }
+
+  function render() {
+    const captured = location.latitude != null && location.longitude != null
+
+    node.innerHTML = `
+      <div class="locpick">
+        <!-- Step 1: capture. One button, and a plain sentence saying why. -->
+        <div class="locpick__capture">
+          <span class="locpick__capture-icon">${icon('map-pin', 'icon-lg')}</span>
+          <div class="locpick__capture-copy">
+            <p class="locpick__capture-title">Where is the problem?</p>
+            <p class="locpick__capture-text">
+              Tap the button and we will pick up the spot automatically, so the officer can find it
+              without calling you.
+            </p>
+          </div>
+          <button type="button" class="btn ${captured ? 'btn--outline' : 'btn--primary'} locpick__btn"
+                  data-detect>
+            ${icon('crosshair', 'icon-sm')}${captured ? 'Update my location' : 'Use my current location'}
+          </button>
         </div>
-      </div>
 
-      <div class="field" data-field="address" style="margin-top:var(--sp-4)">
-        <label class="field__label" for="loc-address">Location / landmark<span class="field__req">*</span></label>
-        <input type="text" class="field__control" id="loc-address" data-address
-               value="${esc(location.address)}"
-               placeholder="e.g. Gayatri Bhavan, Room 214, Second Floor">
-        <p class="field__hint">Mention the building, floor and room number so the officer can find the spot quickly.</p>
-      </div>
+        <!-- Step 2: what we found, in words rather than coordinates. -->
+        <div class="locpick__status" data-field="location">
+          ${statusPanel(captured)}
+        </div>
 
-      <div class="field" data-field="block" style="margin-top:var(--sp-4)">
-        <label class="field__label" for="loc-block">Campus zone (optional)</label>
-        <input type="text" class="field__control" id="loc-block" data-block
-               value="${esc(location.block)}" placeholder="e.g. Hostel Zone A">
-      </div>
+        <!-- Step 3: the map, and the landmark the officer actually reads. -->
+        <div class="locpick__map">
+          ${mapPreview({ ...location, tall: true })}
+        </div>
 
-      <div style="margin-top:var(--sp-5)">
-        ${mapPreview({ ...location, tall: true })}
+        <div class="field" data-field="address">
+          <label class="field__label" for="loc-address">Location / landmark<span class="field__req">*</span></label>
+          <input type="text" class="field__control" id="loc-address" data-address
+                 value="${esc(location.address)}"
+                 placeholder="e.g. Gayatri Bhavan, Room 214, Second Floor">
+          <p class="field__hint">Mention the building, floor and room number so the officer can find the spot quickly.</p>
+        </div>
+
+        <div class="field" data-field="block">
+          <label class="field__label" for="loc-block">Campus zone (optional)</label>
+          <input type="text" class="field__control" id="loc-block" data-block
+                 value="${esc(location.block)}" placeholder="e.g. Hostel Zone A">
+        </div>
       </div>`
 
     applyErrors()
@@ -111,9 +155,13 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
 
   function applyErrors() {
     Object.entries(errors).forEach(([field, message]) => {
-      const wrap = qs(`[data-field="${field === 'location' ? 'latitude' : field}"]`, node)
+      // The `location` error used to be pinned to the latitude input. That
+      // input is gone, so it now lands on the status panel, which is the block
+      // that actually represents the captured point.
+      const wrap = qs(`[data-field="${field}"]`, node)
       if (!wrap || !message) return
       qs('.field__control', wrap)?.classList.add('field__control--error')
+      if (field === 'location') wrap.classList.add('locpick__status--error')
       if (!qs('.field__error', wrap)) {
         wrap.insertAdjacentHTML(
           'beforeend',
@@ -164,9 +212,9 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
         const longitude = Number(position.coords.longitude.toFixed(6))
 
         // A genuine fix from off campus cannot be used as a complaint location.
-        // Drop the pin on the campus centre instead and explain why, so the
-        // student can drag it to the right spot rather than hitting a bare
-        // validation error at submit time.
+        // Fall back to the campus centre and say so plainly, so the student can
+        // retry from the right spot rather than hitting a bare validation error
+        // at submit time. The point stays valid, so the form is never blocked.
         if (!isInsideCampus(latitude, longitude)) {
           source = 'device'
           offCampus = true
@@ -192,16 +240,6 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
   // Typing should not redraw the panel, or the caret would jump on every key.
   on(node, 'input', '[data-address]', (event) => update({ address: event.target.value }, false))
   on(node, 'input', '[data-block]', (event) => update({ block: event.target.value }, false))
-  // Typing coordinates by hand replaces whatever the GPS said, so the
-  // off-campus notice from that fix no longer applies.
-  on(node, 'change', '[data-lat]', (event) => {
-    offCampus = false
-    update({ latitude: event.target.value === '' ? null : Number(event.target.value) })
-  })
-  on(node, 'change', '[data-lng]', (event) => {
-    offCampus = false
-    update({ longitude: event.target.value === '' ? null : Number(event.target.value) })
-  })
 
   render()
 

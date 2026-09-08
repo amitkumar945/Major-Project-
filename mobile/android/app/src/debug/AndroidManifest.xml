@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Debug builds talk to a plain-HTTP dev server, so cleartext is enabled
+      here and ONLY here. The release manifest in src/main keeps
+      usesCleartextTraffic="false", and Gradle does not merge this file into a
+      release build.
+    -->
+    <application
+        android:usesCleartextTraffic="true"
+        tools:replace="android:usesCleartextTraffic" />
+</manifest>

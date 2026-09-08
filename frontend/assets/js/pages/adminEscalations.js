@@ -8,6 +8,7 @@ import { pageHeader, renderShell } from '../components/shell.js'
 import { requireRole } from '../components/session.js'
 import {
   alertBox,
+  complaintCard,
   emptyState,
   errorState,
   escalationBadge,
@@ -96,6 +97,29 @@ function row(complaint) {
     </tr>`
 }
 
+/** The same complaint as a card, for phones where an 11-column table cannot fit.
+ *  Reuses the shared complaintCard so escalations look like every other list. */
+function card(complaint) {
+  return complaintCard(complaint, {
+    linkBase: DETAILS,
+    showUser: true,
+    footer: `
+      <div class="row" style="gap:.5rem;flex-wrap:wrap">
+        ${escalationBadge(complaint.escalationLevel)}
+        <span class="muted" style="font-size:var(--fs-xs)">${esc(complaint.escalationAuthority ?? '')}</span>
+        <a class="btn btn--ghost btn--sm" style="margin-left:auto"
+           href="${DETAILS}?id=${encodeURIComponent(complaint.id)}">${icon('eye', 'icon-sm')}View</a>
+        ${
+          complaint.escalationLevel < 3
+            ? `<button type="button" class="btn btn--ghost btn--sm" data-raise="${esc(complaint.id)}">
+                 ${icon('trending-up', 'icon-sm')}Raise
+               </button>`
+            : ''
+        }
+      </div>`,
+  })
+}
+
 function view(escalations) {
   if (!escalations.length) {
     return `
@@ -130,7 +154,7 @@ function view(escalations) {
           </div>
         </header>
         <div class="card__body card__body--flush">
-          <div class="table-wrap scroll-slim">
+          <div class="desktop-table table-wrap scroll-slim">
             <table class="table" style="min-width:1100px">
               <thead>
                 <tr>
@@ -150,6 +174,7 @@ function view(escalations) {
               <tbody>${escalations.map(row).join('')}</tbody>
             </table>
           </div>
+          <div class="mobile-cards">${escalations.map(card).join('')}</div>
         </div>
       </section>
     </div>`

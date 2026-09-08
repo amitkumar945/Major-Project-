@@ -320,9 +320,30 @@ def get_complaints(options: dict, user: dict = None) -> dict:
     options = options or {}
     query = {}
 
-    # Scope first, so a student can never widen their own view with filters.
-    if user and user.get("role") == "student":
+    # Scope first, so a filter can never widen what the caller is allowed to
+    # see. Every branch below writes a key that the optional filters further
+    # down must not be able to relax - which is why the officer scope is an
+    # $and of its own rather than a plain `department` key: a request carrying
+    # `?department=<other>` would otherwise overwrite it.
+    role = (user or {}).get("role")
+
+    if user and role == "student":
         query["submittedBy.id"] = user["id"]
+    elif user and role == ROLE_OFFICER:
+        # Same rule `can_view()` applies to a single complaint: an officer sees
+        # their own queue plus their department. Without this the list and the
+        # CSV export returned any department's complaints - complainant names
+        # and email addresses included - to any officer who asked for them,
+        # while GET /complaints/<id> correctly answered 403.
+        scope = [{"assignedOfficer.id": user["id"]}]
+        if user.get("department"):
+            scope.append({"department": user["department"]})
+        query["$and"] = [{"$or": scope}]
+        # `?userId=` may still NARROW the officer's own view (the complaints
+        # one student raised inside their department), never widen it - the
+        # $and above keeps the scope in force either way.
+        if options.get("userId"):
+            query["submittedBy.id"] = options["userId"]
     elif options.get("userId"):
         query["submittedBy.id"] = options["userId"]
 
@@ -354,7 +375,7 @@ def get_complaints(options: dict, user: dict = None) -> dict:
         import re
 
         pattern = re.escape(search)
-        query["$or"] = [
+        matches_search = [
             {"id": {"$regex": pattern, "$options": "i"}},
             {"title": {"$regex": pattern, "$options": "i"}},
             {"description": {"$regex": pattern, "$options": "i"}},
@@ -363,6 +384,13 @@ def get_complaints(options: dict, user: dict = None) -> dict:
             {"submittedBy.name": {"$regex": pattern, "$options": "i"}},
             {"assignedOfficer.name": {"$regex": pattern, "$options": "i"}},
         ]
+        # A role scope above may already hold an $or of its own. Both have to
+        # hold at once, so the search joins the $and rather than replacing it -
+        # assigning query["$or"] here would drop the officer's scope entirely.
+        if "$and" in query:
+            query["$and"].append({"$or": matches_search})
+        else:
+            query["$or"] = matches_search
 
     sort_by = options.get("sortBy") or "submittedAt"
     direction = -1 if (options.get("sortDir") or "desc") == "desc" else 1

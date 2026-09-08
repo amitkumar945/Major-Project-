@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.ac.dsvv.grievance.twa",
+      "sha256_cert_fingerprints": [
+        "0E:1F:7B:C4:D3:88:D5:40:34:24:2A:B2:63:F9:CA:3B:1F:4A:46:E8:30:5C:74:ED:7D:DC:6C:47:52:03:A1:EA"
+      ]
+    }
+  }
+]

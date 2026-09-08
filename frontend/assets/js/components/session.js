@@ -54,5 +54,11 @@ export function requireRole(role) {
 /** Sign out and return to the landing page. */
 export async function signOut() {
   await serviceLogout()
+
+  // Drop any pages the service worker cached while this user was signed in.
+  // Without it, the next person on a shared handset could reach the previous
+  // user's screens from the cache. No-op when the PWA script is not loaded.
+  window.dsvvPwa?.clearPrivateCache?.()
+
   location.href = '/index.html'
 }

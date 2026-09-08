@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You are offline &middot; DSVV Grievance</title>
+  <meta name="theme-color" content="#4338ca">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+</head>
+<body style="margin:0;min-height:100vh;display:grid;place-items:center;background:var(--surface-alt,#f6f7fb);padding:1.5rem">
+
+  <main style="max-width:26rem;text-align:center">
+    <div style="width:72px;height:72px;margin:0 auto 1.25rem;border-radius:50%;
+                background:var(--slate-100,#f1f5f9);display:grid;place-items:center">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+           stroke="var(--slate-500,#64748b)" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+        <path d="M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/>
+      </svg>
+    </div>
+
+    <h1 style="font-size:1.5rem;font-weight:700;color:var(--heading,#0f172a);margin:0 0 .5rem">
+      You are offline
+    </h1>
+
+    <p style="font-size:1rem;line-height:1.6;color:var(--text-muted,#475569);margin:0 0 1.75rem">
+      This page needs an internet connection. Your complaints and their updates
+      are stored on the university server, so reconnect to see the latest.
+    </p>
+
+    <button type="button" id="retry" class="btn btn--primary" style="min-height:48px;padding:0 1.5rem">
+      Try again
+    </button>
+
+    <p style="font-size:.8125rem;color:var(--slate-400,#94a3b8);margin:1.5rem 0 0">
+      DSVV Grievance Management System
+    </p>
+  </main>
+
+  <script>
+    document.getElementById('retry').addEventListener('click', function () {
+      location.reload();
+    });
+    // Reload automatically the moment the connection comes back.
+    window.addEventListener('online', function () {
+      location.reload();
+    });
+  </script>
+</body>
+</html>

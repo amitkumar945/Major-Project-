@@ -183,9 +183,13 @@ def statistics():
     if user["role"] == ROLE_STUDENT:
         scope["userId"] = user["id"]
     elif user["role"] == ROLE_OFFICER:
-        scope["officerId"] = request.args.get("officerId") or user["id"]
-        if request.args.get("department"):
-            scope = {"department": request.args["department"]}
+        # Their own queue, or their own department - never another officer's
+        # counters and never another department's. Both used to be readable
+        # by passing ?officerId= / ?department= for someone else.
+        scope["officerId"] = user["id"]
+        department = request.args.get("department")
+        if department and department == user.get("department"):
+            scope = {"department": department}
     else:
         if request.args.get("department"):
             scope["department"] = request.args["department"]

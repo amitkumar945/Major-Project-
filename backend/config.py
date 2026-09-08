@@ -105,6 +105,41 @@ class Config:
     # created. Off by default so the existing frontend register flow still works.
     OTP_REQUIRED_FOR_REGISTER = _bool("OTP_REQUIRED_FOR_REGISTER", False)
 
+    # ----------------------------------------------------------------- mail
+    # SMTP delivery for OTP codes and complaint notifications. Read here so
+    # `app.config` carries them: `services/email_service.py` looks every value
+    # up through `current_app.config`, so a key missing from this class reaches
+    # it as None and every send fails as "not configured" no matter what `.env`
+    # says.
+    #
+    # OFF by default. With MAIL_ENABLED=false the system behaves exactly as it
+    # did before mail existed: OTP falls back to dev mode locally, and
+    # notifications stay in the in-app feed only.
+    #
+    # No credential is hard-coded - the defaults are empty and the real values
+    # live in the git-ignored `backend/.env` (see `.env.example`).
+    MAIL_ENABLED = _bool("MAIL_ENABLED", False)
+    MAIL_SERVER = _str("MAIL_SERVER", "")
+    MAIL_PORT = _int("MAIL_PORT", 587)
+    MAIL_USERNAME = _str("MAIL_USERNAME", "")
+    MAIL_PASSWORD = _str("MAIL_PASSWORD", "")
+    # STARTTLS on 587 (Gmail's recommendation) unless the deployment asks for
+    # implicit TLS on 465 with MAIL_USE_SSL=true.
+    MAIL_USE_TLS = _bool("MAIL_USE_TLS", True)
+    MAIL_USE_SSL = _bool("MAIL_USE_SSL", False)
+    # Blank means "use MAIL_USERNAME"; `email_service._sender_address()` does
+    # that fallback, so an empty default is correct here.
+    MAIL_DEFAULT_SENDER = _str("MAIL_DEFAULT_SENDER", "")
+    MAIL_SENDER_NAME = _str("MAIL_SENDER_NAME", "DSVV Grievance Portal")
+    # Seconds to wait on any single SMTP operation, so a hung server cannot
+    # hold a request open indefinitely.
+    MAIL_TIMEOUT = _int("MAIL_TIMEOUT", 15)
+    # Testing switch: run the whole send path without opening a socket.
+    MAIL_SUPPRESS_SEND = _bool("MAIL_SUPPRESS_SEND", False)
+    # True -> also email complaint notifications, not just OTP codes. The
+    # in-app feed remains the source of truth either way.
+    MAIL_NOTIFICATIONS_ENABLED = _bool("MAIL_NOTIFICATIONS_ENABLED", False)
+
     # ----------------------------------------------------------------- cors
     # Explicit origins only - never "*" in production.
     CORS_ORIGINS = _list(
@@ -171,6 +206,13 @@ class TestConfig(Config):
     # Never let a background thread run during the suite: it would touch the
     # test database underneath the assertions.
     SLA_AUTO_CHECK = False
+
+    # Mail is off for the suite regardless of what the developer's `.env`
+    # holds: a test run must never open an SMTP socket or send real email.
+    # `test_email.py` switches it on per-test against a stub connection.
+    MAIL_ENABLED = False
+    MAIL_SUPPRESS_SEND = False
+    MAIL_NOTIFICATIONS_ENABLED = False
 
 
 # Environments in which returning an OTP to the caller is acceptable.

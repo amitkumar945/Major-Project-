@@ -27,8 +27,8 @@ const LINKS = [
 /**
  * The DSVV crest.
  *
- * `ASSETS.logo` is a neutral placeholder emblem, not the official crest. The
- * markup also renders a CSS placeholder mark underneath the image, and
+ * `ASSETS.logo` is the official crest. The markup also renders a CSS
+ * placeholder mark underneath the image, and
  * `onerror` removes the image if the file is ever missing, so the placeholder
  * shows through instead of a broken-image icon.
  */

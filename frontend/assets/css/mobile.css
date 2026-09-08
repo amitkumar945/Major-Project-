@@ -1,0 +1,284 @@
+/* ===========================================================================
+   Mobile and PWA polish.
+
+   Loaded LAST, so every rule here layers on top of the existing sheets
+   without any of them being edited. Nothing in this file changes behaviour or
+   desktop layout - it only fixes things that specifically bite on a phone:
+   accidental horizontal scroll, taps that are too small or that flash blue,
+   inputs that make iOS zoom, and the notch/gesture-bar insets.
+   =========================================================================== */
+
+/* ------------------------------------------------- 1. horizontal overflow */
+
+/* A single wide child (a long complaint id, a chart, a table) used to push the
+   whole page sideways. The page itself may never scroll horizontally; the wide
+   thing scrolls inside its own container instead. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Long unbroken strings - reference ids, email addresses, URLs in remarks. */
+.c-card__title,
+.c-card__desc,
+.cell-id,
+.timeline__note,
+.remark__text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Anything that genuinely needs width scrolls itself, with momentum. */
+.table-wrap,
+.scroll-slim {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* ------------------------------------------------------- 2. touch targets */
+
+@media (pointer: coarse) {
+  /* Android's accessibility guidance is 48dp; icon-only controls were the
+     main offenders, since their visual size is the icon itself. */
+  .btn,
+  .btn-icon,
+  .field__control,
+  select,
+  .tabbar__link,
+  .navbar__link,
+  .sidebar__link {
+    min-height: 48px;
+  }
+
+  .btn-icon {
+    min-width: 48px;
+  }
+
+  /* Checkboxes and radios are drawn small by the browser; the label is the
+     real target, so give the control itself some room too. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-width: 22px;
+    min-height: 22px;
+  }
+
+  /* Pagination and small chips sit close together; a little spacing prevents
+     the wrong one being hit. */
+  .pagination button,
+  .pagination a {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* The grey flash Android draws over a tapped element looks like a rendering
+   bug on custom-styled buttons. Focus styles are untouched, so keyboard and
+   screen-reader users lose nothing. */
+a,
+button,
+.btn,
+.btn-icon,
+.tabbar__link,
+.c-card {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------- 3. form inputs */
+
+/* iOS Safari zooms the viewport when a focused input is under 16px. Android
+   does not, but matching the size keeps the two platforms identical. */
+@media (max-width: 719px) {
+  .field__control,
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='tel'],
+  input[type='number'],
+  input[type='search'],
+  input[type='date'],
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* A date input on Android renders with its own padding and can overflow its
+   field; this keeps it inside. */
+input[type='date'] {
+  max-width: 100%;
+}
+
+/* ------------------------------------------------ 4. safe areas (notches) */
+
+/* Standalone PWAs draw under the status bar and the gesture pill, so the
+   chrome needs the inset padding the browser normally supplies. */
+@supports (padding: max(0px)) {
+  .topbar {
+    padding-left: max(var(--sp-4), env(safe-area-inset-left));
+    padding-right: max(var(--sp-4), env(safe-area-inset-right));
+  }
+
+  .tabbar {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .modal__panel,
+  .sheet {
+    padding-bottom: max(var(--sp-4), env(safe-area-inset-bottom));
+  }
+}
+
+/* ------------------------------------------------------- 5. modals/sheets */
+
+@media (max-width: 719px) {
+  /* A centred desktop dialog becomes a bottom sheet: reachable one-handed,
+     and it does not fight the on-screen keyboard. */
+  .modal__panel {
+    width: 100%;
+    max-width: 100%;
+    max-height: 92vh;
+    margin: 0;
+    border-radius: var(--r-xl, 16px) var(--r-xl, 16px) 0 0;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    animation: sheet-up .22s ease-out;
+  }
+
+  @keyframes sheet-up {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+
+  /* The body scrolls, the header and footer stay put. */
+  .modal__body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal__panel { animation: none; }
+}
+
+/* ------------------------------------------------------------- 6. charts */
+
+/* Charts are the other common source of sideways scroll: they are drawn at a
+   fixed width and then clipped. Let them shrink to the card instead. */
+.chart,
+.chart-card canvas,
+.chart-card svg {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 719px) {
+  /* Below this width a legend beside the chart leaves neither enough room;
+     stacking keeps both readable. */
+  .chart-card .chart-legend {
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+}
+
+/* ---------------------------------------------------------- 7. long lists */
+
+@media (max-width: 719px) {
+  /* Filter bars wrap instead of scrolling off-screen. */
+  .filters__grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Toolbars that put search + buttons on one row need to stack. */
+  .toolbar {
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+
+  .toolbar .search {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+}
+
+/* ------------------------------------------------------- 8. install button */
+
+/* Injected by assets/js/pwa.js when Chrome offers installation. Sits above
+   the tab bar so it never covers navigation. */
+#pwa-install {
+  position: fixed;
+  right: var(--sp-4, 1rem);
+  bottom: calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom, 0px) + 1rem);
+  z-index: 60;
+
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  min-height: 48px;
+  padding: 0 1.125rem;
+
+  background: var(--brand-600, #4f46e5);
+  color: #fff;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(79, 70, 229, .35);
+
+  font-family: inherit;
+  font-size: .9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: install-in .3s ease-out;
+}
+
+#pwa-install:hover  { background: var(--brand-700, #4338ca); }
+#pwa-install:active { transform: scale(.97); }
+
+#pwa-install:focus-visible {
+  outline: 3px solid var(--brand-300, #a5b4fc);
+  outline-offset: 2px;
+}
+
+@keyframes install-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #pwa-install { animation: none; }
+  #pwa-install:active { transform: none; }
+}
+
+/* Already installed: the prompt is meaningless inside the installed app. */
+@media (display-mode: standalone) {
+  #pwa-install { display: none; }
+}
+
+/* --------------------------------------------------- 9. standalone tweaks */
+
+@media (display-mode: standalone) {
+  /* No browser chrome to pull against, so a stray overscroll bounce reveals
+     the page background and looks broken. */
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  /* "Back to website" style links are confusing inside an installed app. */
+  .auth__back {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ 10. print */
+
+/* The tab bar and install button must not appear on a printed complaint. */
+@media print {
+  .tabbar,
+  #pwa-install,
+  .sidebar,
+  .topbar {
+    display: none !important;
+  }
+}

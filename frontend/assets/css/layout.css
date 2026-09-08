@@ -30,8 +30,8 @@
 
 /* --------------------------------------------------- logo placeholder ---
    The CSS placeholder mark sits underneath and the image in
-   `assets/img/dsvv-logo.svg` is layered on top. Replacing that file with the
-   official crest swaps the mark on every page. If the file is ever missing the
+   `assets/img/dsvv-logo.png` (the official crest) is layered on top. Replacing
+   that file swaps the mark on every page. If the file is ever missing the
    <img> removes itself and the placeholder shows through — never a
    broken-image icon, and never an invented crest.
    See `assets/img/README.md`.
