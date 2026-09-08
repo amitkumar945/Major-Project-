@@ -52,8 +52,14 @@
 .landing h2,
 .landing h3 { color: var(--dsvv-ink); letter-spacing: -.02em; }
 
-/* Nothing on this page may cause a sideways scroll on a phone. */
+/* Nothing on this page may cause a sideways scroll on a phone.
+   `clip` rather than `hidden`: this is the <body> element, and `hidden` would
+   force overflow-y to `auto`, making the body a scroll container and breaking
+   vertical scrolling in the installed PWA. See mobile.css section 1. */
 .page-landing { overflow-x: hidden; }
+@supports (overflow: clip) {
+  .page-landing { overflow-x: clip; }
+}
 
 /* ------------------------------------------------ landing button styles - */
 

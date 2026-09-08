@@ -12,11 +12,32 @@
 
 /* A single wide child (a long complaint id, a chart, a table) used to push the
    whole page sideways. The page itself may never scroll horizontally; the wide
-   thing scrolls inside its own container instead. */
+   thing scrolls inside its own container instead.
+
+   `clip`, NOT `hidden`. Per CSS overflow, giving one axis `hidden` forces the
+   other axis from `visible` to `auto`, which turns the root into a scroll
+   container. In a browser tab that is invisible - the viewport still scrolls -
+   but in an installed PWA there is no browser chrome doing that scrolling, so
+   vertical touch scrolling stopped responding entirely. `clip` contains the
+   overflow without promoting the other axis, so the root keeps
+   `overflow-y: visible` and the viewport scrolls natively on both.
+
+   Both elements need it: clipping only `body` leaves a wide child overflowing
+   the root element instead. */
 html,
 body {
   max-width: 100%;
+  /* Fallback for browsers without `clip` (pre-Chrome 90). They get the old
+     behaviour, which scrolled correctly in a normal tab - the PWA install
+     prompt those browsers do not offer is what made it a problem. */
   overflow-x: hidden;
+}
+
+@supports (overflow: clip) {
+  html,
+  body {
+    overflow-x: clip;
+  }
 }
 
 /* Long unbroken strings - reference ids, email addresses, URLs in remarks. */

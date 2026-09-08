@@ -17,7 +17,11 @@
  * all of which are public and identical for every visitor.
  */
 
-const VERSION = 'v1';
+// Bump on any change to a precached asset. `activate` deletes every cache
+// whose name does not end in this value, so a new version is what makes an
+// already-installed app pick up new CSS/JS instead of serving the old copy
+// cache-first (see `isShellAsset` below).
+const VERSION = 'v2';
 const SHELL_CACHE = `dsvv-shell-${VERSION}`;
 const RUNTIME_CACHE = `dsvv-runtime-${VERSION}`;
 
