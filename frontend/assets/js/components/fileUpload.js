@@ -10,6 +10,7 @@
  */
 
 import { esc, icon, on, qs } from './dom.js'
+import { openImageLightbox } from './modal.js'
 import { UPLOAD_LIMITS } from '../utils/constants.js'
 import { formatFileSize, uid } from '../utils/helpers.js'
 
@@ -76,7 +77,9 @@ export function createFileUpload(container, {
         <div class="file-row" data-file="${esc(item.id)}">
           ${
             item.url
-              ? `<img class="file-row__thumb" src="${esc(item.url)}" alt="Preview of ${esc(item.name)}">`
+              ? `<button type="button" class="file-row__thumb-btn" data-preview="${esc(item.url)}" data-preview-name="${esc(item.name)}" aria-label="Preview ${esc(item.name)}">
+                   <img class="file-row__thumb" src="${esc(item.url)}" alt="Preview of ${esc(item.name)}">
+                 </button>`
               : `<span class="file-row__icon">${icon(KIND_ICONS[item.kind] ?? 'paperclip', 'icon-lg')}</span>`
           }
           <div class="grow" style="min-width:0">
@@ -137,6 +140,9 @@ export function createFileUpload(container, {
   }
 
   on(node, 'click', '[data-browse]', () => input.click())
+  on(node, 'click', '[data-preview]', (event, button) => {
+    openImageLightbox(button.dataset.preview, button.dataset.previewName || 'Uploaded photo')
+  })
   on(node, 'click', '[data-remove]', (event, button) => removeFile(button.dataset.remove))
 
   input.addEventListener('change', () => {

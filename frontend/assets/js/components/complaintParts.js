@@ -5,6 +5,7 @@
  */
 
 import { esc, html, icon } from './dom.js'
+import { openImageLightbox } from './modal.js'
 import { avatar } from './ui.js'
 import { API_BASE_URL } from '../services/mockApi.js'
 import {
@@ -231,6 +232,19 @@ async function hydrateOne(tile) {
 
     tile.replaceChildren(image)
     tile.dataset.evidenceState = 'loaded'
+    tile.classList.add('gallery__media--clickable')
+    tile.setAttribute('role', 'button')
+    tile.setAttribute('tabindex', '0')
+    tile.setAttribute('aria-label', `Open preview of ${tile.dataset.evidenceName ?? 'evidence image'}`)
+
+    const previewImage = () => openImageLightbox(image.src, tile.dataset.evidenceName ?? 'Evidence image')
+    tile.onclick = previewImage
+    tile.onkeydown = (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        previewImage()
+      }
+    }
   } catch (error) {
     failTile(tile, error?.message ?? 'Preview unavailable')
   } finally {

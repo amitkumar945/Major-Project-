@@ -236,7 +236,7 @@ def _register_meta_routes(app: Flask) -> None:
         response.headers.setdefault("Referrer-Policy", "same-origin")
         if request.path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
-        return response
+        return response                              
 
 
 def _register_frontend(app: Flask) -> None:

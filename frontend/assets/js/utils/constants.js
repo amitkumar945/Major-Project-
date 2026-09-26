@@ -262,14 +262,14 @@ export const UNIVERSITY_LOCATION = 'Haridwar, Uttarakhand'
 /**
  * Official image assets.
  *
- * `dsvv-logo.png` is the official DSVV crest. Replacing that one file swaps
+ * `dsvv-logo.svg` is the official DSVV crest. Replacing that one file swaps
  * the mark on every page. If a path ever points at a missing file the
  * interface falls back to a clearly marked placeholder rather than a broken
  * image. See `assets/img/README.md`.
  */
 export const ASSETS = {
-  logo: '/assets/img/dsvv-logo.png',
-  campus: '/assets/img/campus.jpg',
+  logo: '/assets/img/dsvv-logo.svg',
+  campus: '/assets/img/campus.svg',
 }
 
 /** Grievance cell contact details that already exist in the project. */

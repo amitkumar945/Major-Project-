@@ -39,6 +39,27 @@ def _list(name: str, default: str) -> list:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
+def _origins(name: str, default: str) -> list:
+    """Read a CORS origin list, normalised to what browsers actually send.
+
+    A browser's `Origin` header is scheme://host[:port] with NO trailing
+    slash and no path. An env var written as
+    `https://example.vercel.app/` therefore never matches, and every
+    cross-origin request is blocked with no Access-Control-Allow-Origin
+    header - which reads as a mysterious CORS failure rather than a typo.
+    Stripping the trailing slash here makes both spellings work.
+    """
+    normalised = []
+    for origin in _list(name, default):
+        if origin == "*":
+            normalised.append(origin)
+            continue
+        cleaned = origin.rstrip("/")
+        if cleaned and cleaned not in normalised:
+            normalised.append(cleaned)
+    return normalised
+
+
 def _str(name: str, default: str) -> str:
     """Read a string variable, treating a blank value in `.env` as unset.
 
@@ -142,7 +163,9 @@ class Config:
 
     # ----------------------------------------------------------------- cors
     # Explicit origins only - never "*" in production.
-    CORS_ORIGINS = _list(
+    # Normalised via `_origins`: a trailing slash in the env var would
+    # otherwise never match the browser's Origin header.
+    CORS_ORIGINS = _origins(
         "CORS_ORIGINS",
         "http://localhost:5500,http://127.0.0.1:5500,http://localhost:5000,http://127.0.0.1:5000",
     )

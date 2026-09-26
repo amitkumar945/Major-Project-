@@ -120,6 +120,22 @@ const TONE_ICONS = {
  *
  *   if (await confirmDialog({ title: 'Resolve this complaint?' })) { … }
  */
+export function openImageLightbox(src, name = 'Image preview') {
+  if (!src) return null
+
+  const modal = openModal({
+    title: name,
+    size: 'xl',
+    closeOnBackdrop: true,
+    body: `
+      <div class="lightbox__media">
+        <img class="lightbox__image" src="${esc(src)}" alt="${esc(name)}">
+      </div>`,
+  })
+
+  return modal
+}
+
 export function confirmDialog({
   title,
   message = '',

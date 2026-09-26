@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Install DSVV Grievance</title>
+  <meta name="description" content="Install the DSVV Grievance Management System on your device.">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/base.css">
+  <link rel="stylesheet" href="/assets/css/components.css">
+  <link rel="stylesheet" href="/assets/css/layout.css">
+  <link rel="stylesheet" href="/assets/css/mobile.css">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#4338ca">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+  <script src="/assets/js/pwa.js" defer></script>
+  <style>
+    .app-page { min-height: 100vh; padding: 2rem 1rem 4rem; background: var(--surface-subtle, #f6f7fb); }
+    .app-page__header { max-width: 58rem; margin: 0 auto 2rem; display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+    .app-page__brand { display: inline-flex; align-items: center; gap: .75rem; color: inherit; text-decoration: none; font-weight: 700; }
+    .app-page__brand img { width: 2.75rem; height: 2.75rem; object-fit: contain; }
+    .app-page__main { max-width: 58rem; margin: 0 auto; }
+    .app-page__hero { padding: clamp(2rem, 6vw, 4rem); border-radius: 1rem; background: #fff; box-shadow: 0 1rem 3rem rgb(16 24 40 / .08); text-align: center; }
+    .app-page__hero h1 { margin: 0 0 .75rem; }
+    .app-page__hero > p { max-width: 38rem; margin: 0 auto 2rem; color: var(--text-muted, #667085); }
+    .app-page__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; text-align: left; }
+    .app-page__card { padding: 1.25rem; border: 1px solid var(--border, #e5e7eb); border-radius: .75rem; background: #fff; }
+    .app-page__card h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
+    .app-page__card p { margin: 0 0 1rem; color: var(--text-muted, #667085); }
+    #qr-code { min-height: 12rem; display: grid; place-items: center; padding: .75rem; background: #fff; border-radius: .5rem; }
+    #qr-code svg { max-width: 100%; height: auto; }
+    #qr-url { overflow-wrap: anywhere; font-size: .8rem; color: var(--text-muted, #667085); }
+    .qr__warning { margin: 0; text-align: center; color: var(--text-muted, #667085); }
+    .app-page__card .is-disabled { pointer-events: none; opacity: .6; }
+    .app-page__footer { max-width: 58rem; margin: 1.5rem auto 0; text-align: center; }
+    @media (max-width: 680px) { .app-page__options { grid-template-columns: 1fr; } .app-page__header { align-items: flex-start; } }
+  </style>
+</head>
+<body>
+  <div class="app-page">
+    <header class="app-page__header">
+      <a class="app-page__brand" href="/index.html">
+        <img src="/assets/img/dsvv-logo.svg" alt="DSVV">
+        <span>DSVV Grievance Management System</span>
+      </a>
+      <a class="btn btn--outline" href="/index.html">Back to website</a>
+    </header>
+
+    <main class="app-page__main" id="main">
+      <section class="app-page__hero" aria-labelledby="app-title">
+        <h1 id="app-title">Use DSVV Grievance on your device</h1>
+        <p>Install the same grievance portal on your home screen for quick access to complaints, updates and notifications.</p>
+
+        <div class="app-page__options">
+          <article class="app-page__card" id="card-pwa">
+            <h2>Install the web app</h2>
+            <p id="install-note">Add the portal to your home screen from this browser.</p>
+            <button class="btn btn--primary" id="install-app" type="button">Install app</button>
+            <div id="manual-install" hidden>
+              <p>Use your browser menu and choose <strong>Add to Home screen</strong> or <strong>Install app</strong>.</p>
+            </div>
+          </article>
+
+          <article class="app-page__card" id="card-apk">
+            <h2>Android APK</h2>
+            <p id="apk-note">The Android APK has not been published yet.</p>
+            <a class="btn btn--outline" id="apk-download" href="#" aria-disabled="true">Download APK</a>
+          </article>
+        </div>
+
+        <h2>Scan to open</h2>
+        <div id="qr-code" aria-label="QR code for the DSVV Grievance Management System"></div>
+        <p id="qr-url"></p>
+      </section>
+    </main>
+
+    <footer class="app-page__footer">
+      <a href="/login.html">Sign in</a>
+      <span aria-hidden="true"> · </span>
+      <a href="/register.html">Register</a>
+    </footer>
+  </div>
+
+  <script src="/assets/js/appConfig.js"></script>
+  <script src="/assets/js/vendor/qrcode.js"></script>
+  <script>
+    window.APP_DOWNLOAD = {};
+  </script>
+  <script src="/assets/js/appDownload.js"></script>
+</body>
+</html>

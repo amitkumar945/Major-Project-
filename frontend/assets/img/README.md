@@ -8,10 +8,8 @@ once.
 
 | File | Used by | Notes |
 | ---- | ------- | ----- |
-| `dsvv-logo.png` | header, footer, login/register aside | The official DSVV crest. Transparent square, 128×128 or larger; drawn at 44px. |
-| `campus.jpg` | home page hero | Aerial photograph of the DSVV campus. Landscape, ~16:10, 1600px wide or larger. |
-| `dsvv-logo.svg` | — | Superseded placeholder emblem, kept as the offline fallback reference. |
-| `campus.svg` | — | Superseded illustration, kept as a reference. |
+| `dsvv-logo.svg` | header, footer, login/register aside | The DSVV crest used by the shared frontend shell. |
+| `campus.svg` | home page hero | The campus illustration used by the landing page. |
 
 ## Replacing the artwork
 
@@ -21,8 +19,8 @@ once. If you use a different name or format, update the path in
 
 ```js
 export const ASSETS = {
-  logo: '/assets/img/dsvv-logo.png',
-  campus: '/assets/img/campus.jpg',
+  logo: '/assets/img/dsvv-logo.svg',
+  campus: '/assets/img/campus.svg',
 }
 ```
 
