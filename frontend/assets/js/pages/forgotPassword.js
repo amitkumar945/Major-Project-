@@ -162,6 +162,8 @@ async function sendCode(email, button, loadingLabel) {
     devCode = result?.otp ?? ''
     return true
   } catch (error) {
+    const form = qs('#reset-form')
+    if (form && error.fields?.email) showErrors(form, error.fields)
     toast.error(error.message, 'Could not send the code')
     return false
   } finally {
@@ -244,8 +246,10 @@ function attachCode() {
       mount('#root', doneView())
     } catch (error) {
       setLoading(button, false)
-      // A wrong or expired code comes back as a field error from the API.
-      showErrors(form, { otp: error.message })
+      const fieldErrors = error.fields && Object.keys(error.fields).length
+        ? error.fields
+        : { otp: error.message }
+      showErrors(form, fieldErrors)
       toast.error(error.message, 'Could not reset the password')
     }
   })

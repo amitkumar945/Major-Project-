@@ -116,21 +116,23 @@ def send_otp(email: str, purpose: str = PURPOSE_VERIFY) -> dict:
                 )
 
     code = _generate_code(_config("OTP_LENGTH", 6))
+    code_hash = _hash_code(code, email)
     expiry_seconds = _config("OTP_EXPIRY", 300)
     expires_at = now + timedelta(seconds=expiry_seconds)
 
+    replacement = {
+        "email": email,
+        "purpose": purpose,
+        "codeHash": code_hash,
+        "attempts": 0,
+        "verified": False,
+        "sentAt": iso(now),
+        # TTL index on this field deletes the document automatically.
+        "expiresAt": expires_at,
+    }
     otps().replace_one(
         {"email": email, "purpose": purpose},
-        {
-            "email": email,
-            "purpose": purpose,
-            "codeHash": _hash_code(code, email),
-            "attempts": 0,
-            "verified": False,
-            "sentAt": iso(now),
-            # TTL index on this field deletes the document automatically.
-            "expiresAt": expires_at,
-        },
+        replacement,
         upsert=True,
     )
 
@@ -141,15 +143,13 @@ def send_otp(email: str, purpose: str = PURPOSE_VERIFY) -> dict:
     try:
         delivered = _send(email, code, purpose, expiry_seconds)
     except ApiException:
-        # Delivery failed and there is no dev-mode fallback. Drop the record so
-        # a code nobody can read is not left occupying the resend cooldown.
-        otps().delete_one({"email": email, "purpose": purpose})
+        _restore_previous_otp(email, purpose, code_hash, existing)
         raise
 
     if not delivered and not dev_mode:
-        # Mail is unconfigured and dev mode is off: there is no way for the
-        # user to ever learn this code, so fail loudly instead of pretending.
-        otps().delete_one({"email": email, "purpose": purpose})
+        # Mail is unconfigured and dev mode is off: do not strand a user who
+        # still has the previously delivered code.
+        _restore_previous_otp(email, purpose, code_hash, existing)
         raise ApiException("Unable to send OTP email. Please try again later.", 503)
 
     result = {
@@ -169,6 +169,15 @@ def send_otp(email: str, purpose: str = PURPOSE_VERIFY) -> dict:
             "provider is configured. Set OTP_DEV_MODE=false in production."
         )
     return result
+
+
+def _restore_previous_otp(email: str, purpose: str, replacement_hash: str, previous) -> None:
+    """Undo an undelivered replacement without clobbering a concurrent resend."""
+    query = {"email": email, "purpose": purpose, "codeHash": replacement_hash}
+    if previous:
+        otps().replace_one(query, previous)
+    else:
+        otps().delete_one(query)
 
 
 def verify_otp(email: str, code: str, purpose: str = PURPOSE_VERIFY, consume: bool = True) -> bool:

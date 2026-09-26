@@ -133,6 +133,82 @@ def test_a_code_cannot_be_used_twice(client):
     assert second.status_code >= 400
 
 
+def test_latest_reset_code_after_resend_resets_the_password(client, app, monkeypatch):
+    from services import otp_service
+
+    app.config["OTP_RESEND_COOLDOWN"] = 0
+    codes = iter(("123456", "654321"))
+    monkeypatch.setattr(otp_service, "_generate_code", lambda length: next(codes))
+
+    first = client.post(
+        "/api/auth/forgot-password", json={"email": "student@dsvv.ac.in"}
+    ).get_json()["data"]
+    resent = client.post(
+        "/api/auth/forgot-password", json={"email": "student@dsvv.ac.in"}
+    ).get_json()["data"]
+
+    from database import otps
+
+    with app.app_context():
+        record = otps().find_one({"email": "student@dsvv.ac.in"})
+    assert record["purpose"] == "password_reset"
+    assert first["otp"] != resent["otp"]
+
+    stale = client.post(
+        "/api/auth/reset-password",
+        json={
+            "email": "student@dsvv.ac.in",
+            "otp": first["otp"],
+            "newPassword": "Passw0rd!New",
+        },
+    )
+    assert stale.status_code == 400
+
+    reset = client.post(
+        "/api/auth/reset-password",
+        json={
+            "email": "student@dsvv.ac.in",
+            "otp": resent["otp"],
+            "newPassword": "Passw0rd!New",
+        },
+    )
+    assert reset.status_code == 200
+    assert client.post(
+        "/api/auth/login",
+        json={"identifier": "student@dsvv.ac.in", "password": "Passw0rd!New"},
+    ).status_code == 200
+
+
+def test_failed_resend_preserves_the_previously_delivered_code(client, app, monkeypatch):
+    from services import email_service
+
+    app.config["OTP_RESEND_COOLDOWN"] = 0
+    original = client.post(
+        "/api/auth/forgot-password", json={"email": "student@dsvv.ac.in"}
+    ).get_json()["data"]["otp"]
+
+    monkeypatch.setattr(email_service, "is_configured", lambda: True)
+
+    def fail_delivery(*args, **kwargs):
+        raise email_service.EmailError("SMTP unavailable", "connect")
+
+    monkeypatch.setattr(email_service, "send_otp_email", fail_delivery)
+    resend = client.post(
+        "/api/auth/forgot-password", json={"email": "student@dsvv.ac.in"}
+    )
+    assert resend.status_code == 200
+
+    reset = client.post(
+        "/api/auth/reset-password",
+        json={
+            "email": "student@dsvv.ac.in",
+            "otp": original,
+            "newPassword": "Passw0rd!New",
+        },
+    )
+    assert reset.status_code == 200
+
+
 def test_an_expired_code_is_rejected(client):
     from datetime import timedelta
 
