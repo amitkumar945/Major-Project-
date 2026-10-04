@@ -611,4 +611,6 @@ def test_uploaded_file_requires_authentication_to_download(client, auth, student
     url = created.get_json()["data"]["evidence"][0]["url"]
 
     assert client.get(url).status_code == 401
-    assert client.get(url, headers=auth(student_token)).status_code == 200
+    download = client.get(url, headers=auth(student_token))
+    assert download.status_code == 200
+    assert download.headers["Content-Disposition"].startswith("attachment;")

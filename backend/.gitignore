@@ -14,6 +14,57 @@ firebase-credentials.json
 # Uploaded files (keep the folder, ignore its contents)
 uploads/*
 !uploads/.gitkeep
+# Keep traversable, but ignored by default, only the historical fixture paths
+# that were already tracked before they were moved under backend/.
+!uploads/evidence/
+uploads/evidence/**
+!uploads/evidence/2026/
+uploads/evidence/2026/**
+!uploads/evidence/2026/09/
+uploads/evidence/2026/09/**
+!uploads/ocr/
+uploads/ocr/**
+!uploads/ocr/2026/
+uploads/ocr/2026/**
+!uploads/ocr/2026/09/
+uploads/ocr/2026/09/**
+# Preserve the existing small repository fixtures relocated from /uploads.
+!uploads/evidence/2026/09/f-0yrewaibnowo.png
+!uploads/evidence/2026/09/f-12lbxx2ghgkz.png
+!uploads/evidence/2026/09/f-22cfa5ejvwxc.png
+!uploads/evidence/2026/09/f-3vazme622ymy.png
+!uploads/evidence/2026/09/f-4wwdhxqtldqj.png
+!uploads/evidence/2026/09/f-51g5omz4vvwt.png
+!uploads/evidence/2026/09/f-7uzg4x1nqped.png
+!uploads/evidence/2026/09/f-91z45zzhf5rp.png
+!uploads/evidence/2026/09/f-aph9nxbbgkfr.png
+!uploads/evidence/2026/09/f-d3pxi019yykd.png
+!uploads/evidence/2026/09/f-ftzppb9ep2gs.png
+!uploads/evidence/2026/09/f-fvvtg0m1nl9m.png
+!uploads/evidence/2026/09/f-kffwopklqm6z.png
+!uploads/evidence/2026/09/f-l0djvewuptsw.png
+!uploads/evidence/2026/09/f-m1wi0cwurj7l.png
+!uploads/evidence/2026/09/f-n4iro071vl6o.png
+!uploads/evidence/2026/09/f-o9mjrhiyaypo.png
+!uploads/evidence/2026/09/f-pmcipoq3nlwm.png
+!uploads/evidence/2026/09/f-setjp2ruv1cs.png
+!uploads/evidence/2026/09/f-ss8w4pgiuwnq.png
+!uploads/evidence/2026/09/f-tgy5zr52y98a.png
+!uploads/evidence/2026/09/f-u9zmkfs3pktf.png
+!uploads/evidence/2026/09/f-vtwjx76hs2cb.png
+!uploads/evidence/2026/09/f-x51kf7882cct.png
+!uploads/evidence/2026/09/f-xjgc9twm47hf.png
+!uploads/ocr/2026/09/f-1t0da5jfcmox.png
+!uploads/ocr/2026/09/f-1v157qwa1jri.png
+!uploads/ocr/2026/09/f-3w6e36hoi2df.png
+!uploads/ocr/2026/09/f-5tezlx12v8lz.png
+!uploads/ocr/2026/09/f-b22voft3vndu.png
+!uploads/ocr/2026/09/f-fcd5gt2sx9cl.png
+!uploads/ocr/2026/09/f-h9cmrg2dzo3a.png
+!uploads/ocr/2026/09/f-kkiiw7d4pkpf.png
+!uploads/ocr/2026/09/f-lmft57ws53eg.png
+!uploads/ocr/2026/09/f-trpqpn09eanc.png
+!uploads/ocr/2026/09/f-wuls5zzwsm7t.png
 
 # Python
 __pycache__/

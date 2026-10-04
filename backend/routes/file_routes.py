@@ -37,4 +37,4 @@ def serve_file(relative_path):
 
     absolute = resolve_upload_path(relative_path, current_app.config["UPLOAD_FOLDER"])
     # Never inline: an uploaded HTML/SVG rendered on this origin could run script.
-    return send_file(absolute, as_attachment=False, download_name=absolute.name, conditional=True)
+    return send_file(absolute, as_attachment=True, download_name=absolute.name, conditional=True)

@@ -280,6 +280,27 @@ def test_self_registration_cannot_claim_the_officer_role(client):
     assert response.status_code == 403
 
 
+def test_deactivated_admin_cannot_create_an_elevated_account(client, auth, admin_token):
+    """The optional admin path on /register must reject stale admin JWTs."""
+    from database import users
+
+    users().update_one({"id": "ADM-3001"}, {"$set": {"isActive": False}})
+    response = client.post(
+        "/api/auth/register",
+        headers=auth(admin_token),
+        json={
+            "fullName": "Should Not Be Created",
+            "email": "inactive-admin-created@dsvv.ac.in",
+            "password": "Passw0rd!",
+            "userId": "INACTIVE-ADMIN",
+            "department": "MCA",
+            "role": "admin",
+        },
+    )
+    assert response.status_code == 403
+    assert users().find_one({"email": "inactive-admin-created@dsvv.ac.in"}) is None
+
+
 # ------------------------------------------------------- login role selector
 
 

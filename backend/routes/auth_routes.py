@@ -97,10 +97,17 @@ def register():
     if requested_role != ROLE_STUDENT:
         from utils.jwt_utils import extract_token, decode_token
 
-        if extract_token():
+        token = extract_token()
+        if token:
             try:
-                claims = decode_token(extract_token())
+                claims = decode_token(token)
                 actor = auth_service.find_by_id(claims.get("userId"))
+                # Elevated registration is a deliberately optional admin
+                # capability on this public route. Honour the same live
+                # account check as @jwt_required so a deactivated admin's
+                # otherwise-unexpired JWT cannot create privileged users.
+                if actor and actor.get("isActive") is False:
+                    actor = None
             except Exception:
                 actor = None
 

@@ -129,10 +129,34 @@ def redeem(token: str) -> dict:
         raise ApiException("Your account has been deactivated. Contact the administrator.", 403)
 
     # Consume this token, then hand out a fresh one (rotation).
-    refresh_tokens().update_one(
-        {"_id": record["_id"]}, {"$set": {"usedAt": iso(utcnow())}}
+    # Claim the token with a compare-and-set. Two requests can both have read
+    # an unused record above; only one may rotate it. A plain update by _id
+    # would let both requests mint a valid refresh token from the same secret.
+    consumed = refresh_tokens().update_one(
+        {"_id": record["_id"], "usedAt": None, "revokedAt": None},
+        {"$set": {"usedAt": iso(utcnow())}},
     )
+    if not consumed.modified_count:
+        latest = refresh_tokens().find_one({"_id": record["_id"]})
+        if latest and latest.get("usedAt"):
+            count = _revoke_all_for_user(record["userId"], "refresh-token-reuse")
+            logger.warning(
+                "Refresh token reuse detected for %s; revoked %d session(s).",
+                record["userId"], count,
+            )
+            raise ApiException(
+                "This session is no longer valid. Please sign in again.", 401
+            )
+        raise ApiException("This session has been signed out. Please sign in again.", 401)
+
     rotated = issue(user, device=record.get("device", ""), user_agent=record.get("userAgent", ""))
+
+    # A racing request may have detected reuse between our claim and token
+    # insertion. Do not leave a freshly minted token alive in that case.
+    latest = refresh_tokens().find_one({"_id": record["_id"]}, {"revokedAt": 1})
+    if latest and latest.get("revokedAt"):
+        revoke(rotated["refreshToken"])
+        raise ApiException("This session is no longer valid. Please sign in again.", 401)
 
     return {"user": user, **rotated}
 

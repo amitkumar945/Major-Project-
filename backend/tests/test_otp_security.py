@@ -133,6 +133,29 @@ def test_a_code_cannot_be_used_twice(client):
     assert second.status_code >= 400
 
 
+def test_password_reset_revokes_existing_mobile_refresh_tokens(client):
+    session = client.post(
+        "/api/auth/login",
+        json={"identifier": "student@dsvv.ac.in", "password": "student123", "client": "mobile"},
+    ).get_json()["data"]
+    otp = client.post(
+        "/api/auth/forgot-password", json={"email": "student@dsvv.ac.in"}
+    ).get_json()["data"]["otp"]
+
+    reset = client.post(
+        "/api/auth/reset-password",
+        json={
+            "email": "student@dsvv.ac.in",
+            "otp": otp,
+            "newPassword": "BrandNewPass456",
+        },
+    )
+    assert reset.status_code == 200
+    assert client.post(
+        "/api/auth/refresh", json={"refreshToken": session["refreshToken"]}
+    ).status_code == 401
+
+
 def test_latest_reset_code_after_resend_resets_the_password(client, app, monkeypatch):
     from services import otp_service
 

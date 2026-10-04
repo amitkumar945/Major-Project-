@@ -164,7 +164,7 @@ def test_token_signed_with_another_key_is_rejected(client, app, auth):
             "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
             "iss": app.config["JWT_ISSUER"],
         },
-        "an-attackers-secret",
+        "an-attackers-secret-that-is-not-the-app-signing-key",
         algorithm="HS256",
     )
     assert client.get("/api/users", headers=auth(forged)).status_code == 401

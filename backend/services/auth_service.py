@@ -180,6 +180,9 @@ def change_password(user_id: str, current_password: str, new_password: str) -> N
         {"id": user_id},
         {"$set": {"passwordHash": hash_password(new_password), "passwordChangedAt": iso(utcnow())}},
     )
+    from services import token_service
+
+    token_service.revoke_all(user_id, reason="password-change")
     audit_service.log(
         audit_service.PASSWORD_CHANGED,
         clean_document({k: v for k, v in account.items() if k != "passwordHash"}),
@@ -197,6 +200,9 @@ def reset_password(email: str, new_password: str) -> None:
         {"id": account["id"]},
         {"$set": {"passwordHash": hash_password(new_password), "passwordChangedAt": iso(utcnow())}},
     )
+    from services import token_service
+
+    token_service.revoke_all(account["id"], reason="password-reset")
     audit_service.log(audit_service.PASSWORD_CHANGED, account, "Password reset via OTP.")
 
 

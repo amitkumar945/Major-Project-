@@ -173,6 +173,23 @@ def test_logout_revokes_the_refresh_token(client):
     ).status_code == 401
 
 
+def test_changing_password_revokes_existing_mobile_refresh_tokens(client):
+    session = _login(client, mobile=True)
+    changed = client.put(
+        "/api/auth/password",
+        headers={"Authorization": "Bearer " + session["token"]},
+        json={
+            "currentPassword": "student123",
+            "newPassword": "BrandNewPass456",
+            "confirmPassword": "BrandNewPass456",
+        },
+    )
+    assert changed.status_code == 200
+    assert client.post(
+        "/api/auth/refresh", json={"refreshToken": session["refreshToken"]}
+    ).status_code == 401
+
+
 def test_a_deactivated_account_cannot_refresh(client, app):
     from database import users
 

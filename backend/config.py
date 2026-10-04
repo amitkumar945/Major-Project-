@@ -98,7 +98,13 @@ class Config:
     # app is running on Vercel, but still allow local development to keep the
     # repository-local uploads folder.
     _default_upload_folder = "/tmp/uploads" if os.environ.get("VERCEL") else str(BASE_DIR / "uploads")
-    UPLOAD_FOLDER = _str("UPLOAD_FOLDER", _default_upload_folder)
+    UPLOAD_FOLDER = Path(_str("UPLOAD_FOLDER", _default_upload_folder))
+    # Relative upload paths are anchored to the backend directory, not the
+    # process working directory. This keeps `uploads` stable whether the app
+    # is launched from the repository root or from `backend/`.
+    if not UPLOAD_FOLDER.is_absolute():
+        UPLOAD_FOLDER = BASE_DIR / UPLOAD_FOLDER
+    UPLOAD_FOLDER = str(UPLOAD_FOLDER)
     # Frontend caps uploads at 5 MB per file (UPLOAD_LIMITS in constants.js).
     MAX_FILE_SIZE = _int("MAX_FILE_SIZE", 5 * 1024 * 1024)
     MAX_FILES_PER_REQUEST = _int("MAX_FILES_PER_REQUEST", 5)
@@ -212,7 +218,15 @@ class Config:
     IS_TEST = False
     # Serve the existing frontend folder from Flask so one server runs everything.
     SERVE_FRONTEND = _bool("SERVE_FRONTEND", True)
-    FRONTEND_FOLDER = _str("FRONTEND_FOLDER", str(BASE_DIR.parent / "frontend"))
+    FRONTEND_FOLDER = Path(
+        _str("FRONTEND_FOLDER", str(BASE_DIR.parent / "frontend"))
+    )
+    # FRONTEND_FOLDER is commonly configured as `frontend` in .env.example.
+    # Resolve it from the repository root so `python app.py` behaves the same
+    # whether the process starts in the repository root or in backend/.
+    if not FRONTEND_FOLDER.is_absolute():
+        FRONTEND_FOLDER = BASE_DIR.parent / FRONTEND_FOLDER
+    FRONTEND_FOLDER = str(FRONTEND_FOLDER)
 
 
 class TestConfig(Config):
