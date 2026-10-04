@@ -1,12 +1,11 @@
 @echo off
 REM ===================================================================
-REM  DSVV Grievance Management System - start the local web server
+REM  DSVV Grievance Management System - start the full local app
 REM
-REM  Double-click this file to run the project.
-REM  It serves this folder on http://localhost:5500 and opens a browser.
+REM  Double-click this file to run Flask, which serves both the frontend
+REM  and API on http://127.0.0.1:5000.
 REM
-REM  The site cannot be opened by double-clicking index.html, because
-REM  browsers block JavaScript modules loaded from a file:// path.
+REM  MongoDB must be running before starting the backend.
 REM ===================================================================
 
 title DSVV Grievance Management System - Server
@@ -38,7 +37,7 @@ if "%PY%"=="" (
 
 echo   Open this address in your browser:
 echo.
-echo        http://localhost:5500
+echo        http://127.0.0.1:5000
 echo.
 echo   Demo logins:
 echo        student@dsvv.ac.in / student123
@@ -49,10 +48,14 @@ echo   Press Ctrl+C in this window to stop the server.
 echo  ================================================================
 echo.
 
-REM Give the server a moment to bind, then open the browser.
-start "" http://localhost:5500
+REM Prefer the project virtual environment when it exists.
+set PROJECT_PY=%~dp0..\.venv\Scripts\python.exe
+if exist "%PROJECT_PY%" set PY="%PROJECT_PY%"
 
-%PY% -m http.server 5500
+REM Flask serves the frontend and /api from this single process.
+cd /d "%~dp0..\backend"
+start "" /b powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; Start-Process 'http://127.0.0.1:5000'"
+%PY% app.py
 
 echo.
 echo   Server stopped.

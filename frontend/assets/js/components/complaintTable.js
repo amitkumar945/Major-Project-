@@ -118,7 +118,7 @@ function headerCell(key, { sortBy, sortDir, sortable }) {
   const glyph = active ? (sortDir === 'asc' ? 'arrow-up' : 'arrow-down') : 'sort'
 
   return `<th scope="col" aria-sort="${ariaSort}">
-            <button type="button" class="th-sort" data-sort="${esc(column.sortKey)}" aria-sort="${ariaSort}">
+            <button type="button" class="th-sort" data-sort="${esc(column.sortKey)}">
               ${esc(column.label)}${icon(glyph, 'icon-sm')}
             </button>
           </th>`

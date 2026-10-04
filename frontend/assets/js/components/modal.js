@@ -12,6 +12,7 @@
 import { esc, icon, on, qs, qsa } from './dom.js'
 
 let openCount = 0
+let modalSequence = 0
 
 /**
  * @param {object} options
@@ -33,18 +34,22 @@ export function openModal({
   onClose,
 } = {}) {
   const previouslyFocused = document.activeElement
+  const modalId = ++modalSequence
+  const titleId = `modal-title-${modalId}`
+  const descriptionId = `modal-description-${modalId}`
 
   const backdrop = document.createElement('div')
   backdrop.className = 'modal-backdrop'
   backdrop.innerHTML = `
     <div class="modal modal--${esc(size)}" role="dialog" aria-modal="true"
-         ${title ? 'aria-labelledby="modal-title"' : ''} tabindex="-1">
+         ${title ? `aria-labelledby="${titleId}"` : ''}
+         ${title && description ? `aria-describedby="${descriptionId}"` : ''} tabindex="-1">
       ${
         title
           ? `<header class="modal__head">
                <div class="grow">
-                 <h2 class="modal__title" id="modal-title">${esc(title)}</h2>
-                 ${description ? `<p class="modal__desc">${esc(description)}</p>` : ''}
+                 <h2 class="modal__title" id="${titleId}">${esc(title)}</h2>
+                 ${description ? `<p class="modal__desc" id="${descriptionId}">${esc(description)}</p>` : ''}
                </div>
                <button type="button" class="btn-icon" data-close aria-label="Close dialog">
                  ${icon('x', 'icon-md')}
@@ -69,7 +74,7 @@ export function openModal({
     openCount = Math.max(openCount - 1, 0)
     if (openCount === 0) document.body.style.overflow = ''
     document.removeEventListener('keydown', handleKey)
-    previouslyFocused?.focus?.()
+    if (previouslyFocused?.isConnected) previouslyFocused.focus?.()
     onClose?.()
   }
 
@@ -83,7 +88,7 @@ export function openModal({
     const focusable = qsa(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       panel,
-    )
+    ).filter((item) => item.getClientRects().length > 0)
     if (!focusable.length) return
     const first = focusable[0]
     const last = focusable[focusable.length - 1]

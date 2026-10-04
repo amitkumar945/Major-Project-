@@ -35,13 +35,18 @@ function normaliseBase(value) {
   return /\/api$/.test(trimmed) ? trimmed : `${trimmed}/api`
 }
 
-const SAME_ORIGIN = ['5000', '80', '443', ''].includes(location.port)
+// The only supported separate static-server workflow is VS Code Live Server
+// on localhost:5500. Every other host/port is assumed to serve the API on the
+// same origin; hard-coding the backend's default port here breaks deployments
+// that bind Flask/Gunicorn to PORT (for example, Render's assigned port).
+const IS_LIVE_SERVER = location.port === '5500'
+  && ['localhost', '127.0.0.1'].includes(location.hostname)
 
 export const API_BASE_URL = CONFIGURED
   ? normaliseBase(CONFIGURED)
-  : SAME_ORIGIN
-    ? '/api'
-    : `${location.protocol}//${location.hostname}:5000/api`
+  : IS_LIVE_SERVER
+    ? `${location.protocol}//${location.hostname}:5000/api`
+    : '/api'
 
 /**
  * The real Flask backend is now connected; every service calls it over HTTP.

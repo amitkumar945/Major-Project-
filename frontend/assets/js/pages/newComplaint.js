@@ -251,7 +251,7 @@ function render() {
       </button>
       ${
         step === STEPS.length - 1
-          ? `<button type="button" class="btn btn--success btn--lg" data-submit>${icon('send', 'icon-md')}Submit Complaint</button>`
+          ? `<button type="button" class="btn btn--primary btn--lg" data-submit>${icon('send', 'icon-md')}Submit a grievance</button>`
           : `<button type="button" class="btn btn--primary btn--lg" data-next>Continue${icon('arrow-right', 'icon-sm')}</button>`
       }
     </footer>`
@@ -458,15 +458,15 @@ ready(() => {
   user = requireRole(ROLES.STUDENT)
   if (!user) return
 
-  renderShell(user, { title: 'Submit a Complaint' })
+  renderShell(user, { title: 'Submit a Grievance' })
 
   qs('#root').innerHTML = `
     ${pageHeader({
-      title: 'Submit a Complaint',
+      title: 'Submit a grievance',
       lead: 'Five short steps. We send it to the right department for you.',
       crumbs: [
         { label: 'Dashboard', href: '/student/dashboard.html' },
-        { label: 'Submit a Complaint' },
+        { label: 'Submit a grievance' },
       ],
     })}
     <section class="card" id="form-card"></section>`

@@ -11,7 +11,7 @@ import { ROLES, UNIVERSITY_NAME } from '../utils/constants.js'
 const FAQS = [
   {
     q: 'How do I register a complaint?',
-    a: 'Open “Submit Complaint” from the sidebar and follow the five steps: describe the problem, attach photographs, tag the location, run the AI analysis, then review and submit. You will receive a reference number immediately.',
+    a: 'Open “Submit a grievance” from the sidebar and follow the five steps: describe the problem, attach photographs, tag the location, run the AI analysis, then review and submit. You will receive a reference number immediately.',
   },
   {
     q: 'How long will my complaint take?',

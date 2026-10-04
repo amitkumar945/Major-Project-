@@ -46,7 +46,7 @@ export function escalationBadge(level) {
 
 /* =============================================================== AVATAR === */
 
-export function avatar(name, color = '#4f46e5', size = 'md') {
+export function avatar(name, color = '#1d4ed8', size = 'md') {
   return `<span class="avatar avatar--${esc(size)}" style="background:${esc(color)}" aria-hidden="true">${esc(getInitials(name))}</span>`
 }
 
@@ -127,6 +127,37 @@ export function progressBar({ value = 0, max = 100, tone = '', label = '', value
     `<div class="progress__track" role="progressbar" aria-valuenow="${Math.round(percent)}" aria-valuemin="0" aria-valuemax="100" aria-label="${esc(label || 'Progress')}">`,
     `<div class="progress__bar ${tone ? `progress__bar--${esc(tone)}` : ''}" style="width:${percent}%"></div>`,
     '</div></div>',
+  )
+}
+
+const COMPLAINT_STAGES = [
+  { label: 'Submitted', icon: 'file-plus' },
+  { label: 'Assigned', icon: 'user-check' },
+  { label: 'In Progress', icon: 'activity' },
+  { label: 'Resolved', icon: 'check-circle' },
+  { label: 'Feedback', icon: 'star' },
+]
+
+/** Compact status rail based on the complaint's current server state. */
+export function complaintProgress(complaint) {
+  const status = String(complaint?.status ?? '').toLowerCase()
+  const isResolved = status === 'resolved' || status === 'closed'
+  const hasFeedback = Boolean(complaint?.feedback)
+  const hasAssignment = Boolean(complaint?.assignedOfficer) || ['assigned', 'accepted'].includes(status)
+  const isActiveWork = ['in progress', 'pending', 'reopened', 'escalated'].includes(status)
+  const activeIndex = hasFeedback ? COMPLAINT_STAGES.length : isResolved ? 4 : isActiveWork ? 2 : hasAssignment ? 1 : 0
+
+  return html(
+    '<ol class="complaint-steps" aria-label="Complaint progress">',
+    COMPLAINT_STAGES.map((stage, index) => {
+      const state = index < activeIndex || hasFeedback ? 'is-complete' : index === activeIndex ? 'is-current' : ''
+      const current = index === activeIndex && !hasFeedback ? ' aria-current="step"' : ''
+      return `<li class="complaint-step ${state}"${current}>
+        <span class="complaint-step__marker">${icon(stage.icon, 'icon-sm')}</span>
+        <span class="complaint-step__label">${esc(stage.label)}</span>
+      </li>`
+    }).join(''),
+    '</ol>',
   )
 }
 

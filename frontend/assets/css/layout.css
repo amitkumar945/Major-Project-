@@ -253,8 +253,6 @@
     justify-content: space-between;
     padding: var(--sp-10);
     background: var(--brand-700);
-    background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / .12) 1px, transparent 0);
-    background-size: 22px 22px;
     color: #fff;
   }
 
@@ -282,8 +280,8 @@
   width: var(--sidebar-w);
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
+  background: var(--brand-900);
+  border-right: 1px solid rgb(255 255 255 / .1);
   transform: translateX(-100%);
   transition: transform var(--t-slow);
 }
@@ -297,7 +295,7 @@
   gap: var(--sp-2);
   height: var(--topbar-h);
   padding-inline: var(--sp-4);
-  border-bottom: 1px solid var(--border-soft);
+  border-bottom: 1px solid rgb(255 255 255 / .12);
   flex: none;
 }
 
@@ -316,7 +314,7 @@
   font-weight: 600;
   letter-spacing: .06em;
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: rgb(255 255 255 / .56);
 }
 
 .sidebar__link {
@@ -326,30 +324,30 @@
   min-height: var(--tap);
   padding: .625rem .875rem;
   border-radius: var(--r-md);
-  color: var(--slate-600);
+  color: rgb(255 255 255 / .78);
   font-size: var(--fs-base);
   font-weight: 500;
   transition: background-color var(--t-fast), color var(--t-fast);
 }
 
-.sidebar__link .icon { color: var(--slate-400); transition: color var(--t-fast); }
+.sidebar__link .icon { color: rgb(255 255 255 / .58); transition: color var(--t-fast); }
 
-.sidebar__link:hover { background: var(--slate-100); color: var(--slate-900); }
-.sidebar__link:hover .icon { color: var(--slate-600); }
+.sidebar__link:hover { background: rgb(255 255 255 / .09); color: #fff; }
+.sidebar__link:hover .icon { color: #fff; }
 
 .sidebar__link.is-active {
-  background: var(--brand-50);
-  color: var(--brand-700);
+  background: var(--brand-600);
+  color: #fff;
   font-weight: 600;
 }
-.sidebar__link.is-active .icon { color: var(--brand-600); }
+.sidebar__link.is-active .icon { color: #fff; }
 
 .sidebar__link .icon { flex: none; }
 .sidebar__link .badge--counter { margin-left: auto; }
 
 .sidebar__foot {
   padding: var(--sp-3);
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid rgb(255 255 255 / .12);
   flex: none;
 }
 
@@ -359,11 +357,11 @@
   gap: .625rem;
   padding: .625rem .75rem;
   border-radius: var(--r-md);
-  background: var(--slate-50);
+  background: rgb(255 255 255 / .08);
 }
 
-.sidebar__user-name { font-size: var(--fs-base); font-weight: 600; color: var(--heading); }
-.sidebar__user-role { font-size: var(--fs-xs); color: var(--text-muted); }
+.sidebar__user-name { font-size: var(--fs-base); font-weight: 600; color: #fff; }
+.sidebar__user-role { font-size: var(--fs-xs); color: rgb(255 255 255 / .62); }
 
 .sidebar__logout {
   display: flex;
@@ -374,20 +372,21 @@
   margin-top: var(--sp-2);
   padding: .625rem .875rem;
   border-radius: var(--r-md);
-  color: var(--slate-600);
+  color: rgb(255 255 255 / .78);
   font-size: var(--fs-base);
   font-weight: 500;
   transition: background-color var(--t-fast), color var(--t-fast);
 }
-.sidebar__logout:hover { background: var(--red-50); color: var(--red-700); }
+.sidebar__logout:hover { background: rgb(255 255 255 / .1); color: #fff; }
 
 /* The sidebar is a light surface, so the logo reverts to its dark treatment
    even though the shared `logo--light` modifier is still on the markup (the
    auth aside still needs that modifier as-is). */
-.sidebar .logo--light .logo__mark { background: var(--brand-600); box-shadow: none; }
-.sidebar .logo--light .logo__name { color: var(--heading); }
-.sidebar .logo--light .logo__sub  { color: var(--text-muted); }
-.sidebar .sidebar__close { color: var(--slate-500) !important; }
+.sidebar .logo--light .logo__mark { background: transparent; box-shadow: none; }
+.sidebar .logo--light .logo__name { color: #fff; }
+.sidebar .logo--light .logo__sub  { color: rgb(255 255 255 / .65); }
+.sidebar .sidebar__close { color: rgb(255 255 255 / .76) !important; }
+.sidebar__brand-logo { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
 
 /* dark overlay behind the drawer on small screens */
 .sidebar-overlay {
@@ -417,6 +416,19 @@
 .topbar__search { flex: 1; max-width: 26rem; }
 
 .topbar__actions { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
+.topbar__title { flex: 1; min-width: 0; font-size: var(--fs-md); }
+.topbar__account { width: auto; padding-inline: .25rem; }
+
+.topbar__profile-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-inline: .35rem;
+  line-height: 1.25;
+  text-align: left;
+}
+.topbar__profile-copy strong { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); color: var(--heading); }
+.topbar__profile-copy small { color: var(--text-muted); font-size: 11px; }
 
 .bell { position: relative; }
 .bell__dot {
@@ -480,7 +492,7 @@
 .page {
   flex: 1;
   /* The bottom padding clears the mobile tab bar; on desktop the tab bar is
-     hidden and --tabbar-h is set to 0 by the 1024px media query below. */
+     hidden and --tabbar-h is set to 0 by the 1200px media query below. */
   padding: var(--sp-6) var(--sp-4) calc(var(--sp-12) + var(--tabbar-h));
 }
 
@@ -581,17 +593,24 @@
   .page__actions > .btn { flex: 1; }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1200px) {
   .sidebar { transform: translateX(0); }
   .sidebar__close { display: none; }
   .sidebar-overlay { display: none; }
   .app__main { margin-left: var(--sidebar-w); }
   .topbar__toggle { display: none; }
-  .page { padding-inline: var(--sp-6); }
 
   /* On desktop the sidebar is always visible, so the tab bar is redundant. */
   .tabbar { display: none; }
   .app { --tabbar-h: 0px; }
+}
+
+@media (min-width: 1024px) {
+  .page { padding-inline: var(--sp-6); }
+}
+
+@media (max-width: 560px) {
+  .topbar__profile-copy { display: none; }
 }
 
 @media (min-width: 1280px) {

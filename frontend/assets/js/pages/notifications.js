@@ -44,7 +44,8 @@ function view() {
     .map(
       (tab) => `
       <button type="button" class="tab" role="tab" data-tab="${tab.id}"
-              aria-selected="${filter === tab.id}">
+              id="notification-tab-${tab.id}" aria-controls="notification-panel"
+              aria-selected="${filter === tab.id}" tabindex="${filter === tab.id ? '0' : '-1'}">
         ${tab.label}<span class="tab__count">${tab.count}</span>
       </button>`,
     )
@@ -62,7 +63,8 @@ function view() {
         }
       </header>
 
-      <div class="card__body card__body--flush">
+      <div class="card__body card__body--flush" id="notification-panel" role="tabpanel"
+           aria-labelledby="notification-tab-${filter}" tabindex="0">
         ${
           shown.length
             ? shown.map((item) => notificationItem(item, { detailsHref: DETAILS })).join('')
@@ -116,6 +118,25 @@ ready(() => {
   on(area, 'click', '[data-tab]', (event, button) => {
     filter = button.dataset.tab
     draw()
+    qs(`[data-tab="${filter}"]`, area)?.focus()
+  })
+
+  on(area, 'keydown', '[data-tab]', (event, button) => {
+    const tabs = [...area.querySelectorAll('[data-tab]')]
+    const current = tabs.indexOf(button)
+    const nextIndex = event.key === 'ArrowRight'
+      ? (current + 1) % tabs.length
+      : event.key === 'ArrowLeft'
+        ? (current - 1 + tabs.length) % tabs.length
+        : event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? tabs.length - 1
+            : -1
+    if (nextIndex < 0) return
+    event.preventDefault()
+    tabs[nextIndex].focus()
+    tabs[nextIndex].click()
   })
 
   on(area, 'click', '[data-mark-read]', async (event, button) => {

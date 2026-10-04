@@ -6,18 +6,20 @@
    colour value, so the whole look can be changed from this one file.
    ========================================================================== */
 
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
 :root {
   /* ---------------------------------------------------------- brand ---- */
-  --brand-50:  #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-300: #a5b4fc;
-  --brand-400: #818cf8;
-  --brand-500: #6366f1;
-  --brand-600: #4f46e5;
-  --brand-700: #4338ca;
-  --brand-800: #3730a3;
-  --brand-900: #312e81;
+   --brand-50:  #eff6ff;
+   --brand-100: #dbeafe;
+   --brand-200: #bfdbfe;
+   --brand-300: #93c5fd;
+   --brand-400: #60a5fa;
+   --brand-500: #3b82f6;
+   --brand-600: #1d4ed8;
+   --brand-700: #1e40af;
+   --brand-800: #1e3a8a;
+   --brand-900: #172554;
 
   /* Saffron accent - a nod to the university's visual identity */
   --accent-50:  #fff7ed;
@@ -43,6 +45,7 @@
   --green-100: #d1fae5;
   --green-600: #059669;
   --green-700: #047857;
+  --green-800: #065f46;
 
   --amber-50:  #fffbeb;
   --amber-100: #fef3c7;
@@ -72,7 +75,7 @@
   --purple-700: #7e22ce;
 
   /* --------------------------------------------------------- surface ---- */
-  --page:        #f6f7fb;
+   --page:        #f4f7fb;
   --surface:     #ffffff;
   --surface-alt: var(--slate-50);
   --border:      var(--slate-200);
@@ -84,21 +87,20 @@
   --heading:    var(--slate-900);
 
   /* ---------------------------------------------------------- shadow ---- */
-  --shadow-sm:    0 1px 2px rgb(16 24 40 / .04), 0 1px 3px rgb(16 24 40 / .06);
-  --shadow-md:    0 4px 6px -1px rgb(16 24 40 / .07), 0 2px 4px -2px rgb(16 24 40 / .05);
-  --shadow-panel: 0 10px 30px -12px rgb(16 24 40 / .18);
-  --shadow-drawer: 0 20px 50px -20px rgb(16 24 40 / .35);
+   --shadow-sm:    0 1px 2px rgb(16 24 40 / .04), 0 1px 3px rgb(16 24 40 / .05);
+   --shadow-md:    0 3px 8px -2px rgb(16 24 40 / .08), 0 1px 3px rgb(16 24 40 / .04);
+   --shadow-panel: 0 8px 24px -12px rgb(16 24 40 / .2);
+   --shadow-drawer: 0 16px 36px -20px rgb(16 24 40 / .32);
 
   /* ----------------------------------------------------------- shape ---- */
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
-  --r-xl: 20px;
+   --r-sm: 6px;
+   --r-md: 8px;
+   --r-lg: 12px;
+   --r-xl: 16px;
   --r-full: 999px;
 
   /* ---------------------------------------------------------- typography */
-  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
+   --font: Inter, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
 
   --fs-xs:   .8125rem;  /* 13px - captions, table headers  */

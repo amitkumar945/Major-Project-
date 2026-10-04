@@ -16,7 +16,7 @@ import { confirmDialog } from './modal.js'
 import { MENUS, TABS } from './navigation.js'
 import { roleLabel, signOut } from './session.js'
 import { getUnreadCount } from '../services/notificationService.js'
-import { APP_NAME, UNIVERSITY_SHORT } from '../utils/constants.js'
+import { APP_NAME, ASSETS, UNIVERSITY_SHORT } from '../utils/constants.js'
 
 /* ------------------------------------------------------------- sidebar --- */
 
@@ -37,7 +37,7 @@ function sidebarMarkup(user, activeHref) {
     <aside class="sidebar" id="app-sidebar">
       <div class="sidebar__head">
         <a class="logo logo--light logo--sm" href="/index.html">
-          <span class="logo__mark">${icon('shield-check', 'icon-md')}</span>
+          <span class="logo__mark"><img class="sidebar__brand-logo" src="${esc(ASSETS.logo)}" alt="DSVV"></span>
           <span>
             <span class="logo__name">${esc(UNIVERSITY_SHORT)} ${esc(APP_NAME)}</span>
           </span>
@@ -78,7 +78,7 @@ function topbarMarkup(user, title) {
         ${icon('menu', 'icon-md')}
       </button>
 
-      <p class="strong truncate" style="font-size:var(--fs-md)">${esc(title)}</p>
+      <p class="strong truncate topbar__title">${esc(title)}</p>
 
       <div class="topbar__actions">
         <a class="btn-icon bell" href="${esc(notificationsHref(user.role))}" aria-label="Notifications">
@@ -87,9 +87,10 @@ function topbarMarkup(user, title) {
         </a>
 
         <div class="menu">
-          <button type="button" class="btn-icon" data-account aria-haspopup="true" aria-expanded="false"
-                  aria-label="Account menu" style="width:auto;padding-inline:.25rem">
+          <button type="button" class="btn-icon topbar__account" data-account aria-haspopup="true" aria-expanded="false"
+                  aria-label="Account menu">
             ${avatar(user.name, user.avatarColor, 'xs')}
+            <span class="topbar__profile-copy"><strong>${esc(user.name)}</strong><small>${esc(roleLabel(user.role))}</small></span>
             ${icon('chevron-down', 'icon-sm')}
           </button>
           <div class="menu__panel" data-account-panel hidden>
@@ -119,7 +120,7 @@ function profileHref(role) {
 /* ----------------------------------------------------------- tab bar --- */
 
 /**
- * Bottom navigation for phones. Hidden from 1024px up by the `.tabbar` rules
+ * Bottom navigation for phones and tablets. Hidden from 1200px up by `.tabbar`
  * in layout.css, where the sidebar takes over.
  */
 function tabbarMarkup(user, activeHref) {
@@ -202,39 +203,88 @@ export function renderShell(user, { title }) {
   refreshUnreadBadge(user)
 }
 
-/* The sidebar is a drawer below 1024px and a fixed column above it. */
+/* The sidebar is a drawer below 1200px and a fixed column above it. */
 function wireDrawer() {
   const sidebar = qs('#app-sidebar')
+  const appMain = qs('.app__main')
+  const tabbar = qs('.tabbar')
   let overlay = null
+  let opener = null
+
+  function focusableItems() {
+    return qsa(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      sidebar,
+    ).filter((item) => item.getClientRects().length > 0)
+  }
 
   function open() {
+    if (sidebar.classList.contains('is-open')) return
+    opener = document.activeElement
     sidebar.classList.add('is-open')
+    sidebar.setAttribute('role', 'dialog')
+    sidebar.setAttribute('aria-modal', 'true')
+    sidebar.setAttribute('aria-label', 'Navigation menu')
+    if (appMain) appMain.inert = true
+    if (tabbar) tabbar.inert = true
     qsa('[data-open-sidebar]').forEach((b) => b.setAttribute('aria-expanded', 'true'))
     overlay = document.createElement('div')
     overlay.className = 'sidebar-overlay'
+    overlay.setAttribute('aria-hidden', 'true')
     overlay.addEventListener('click', close)
     document.body.appendChild(overlay)
     document.body.style.overflow = 'hidden'
+    const initialFocus = qs('[data-close-sidebar]', sidebar) ?? focusableItems()[0]
+    initialFocus?.focus()
   }
 
   function close() {
+    if (!sidebar.classList.contains('is-open')) return
     sidebar.classList.remove('is-open')
+    sidebar.removeAttribute('role')
+    sidebar.removeAttribute('aria-modal')
+    sidebar.removeAttribute('aria-label')
+    if (appMain) appMain.inert = false
+    if (tabbar) tabbar.inert = false
     qsa('[data-open-sidebar]').forEach((b) => b.setAttribute('aria-expanded', 'false'))
     overlay?.remove()
     overlay = null
     document.body.style.overflow = ''
+    if (opener?.isConnected && opener.getClientRects().length > 0) {
+      opener.focus()
+    } else if (window.innerWidth >= 1200) {
+      focusableItems()[0]?.focus()
+    }
+    opener = null
   }
 
   on(document, 'click', '[data-open-sidebar]', open)
   on(document, 'click', '[data-close-sidebar]', close)
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && sidebar.classList.contains('is-open')) close()
+    if (!sidebar.classList.contains('is-open')) return
+    if (event.key === 'Escape') {
+      close()
+      return
+    }
+    if (event.key !== 'Tab') return
+
+    const focusable = focusableItems()
+    if (!focusable.length) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (event.shiftKey && (document.activeElement === first || !sidebar.contains(document.activeElement))) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (document.activeElement === last || !sidebar.contains(document.activeElement))) {
+      event.preventDefault()
+      first.focus()
+    }
   })
 
-  // Tidy up if the window is resized past the breakpoint while the drawer is open.
+  // Tidy up if the window is resized to the desktop layout while the drawer is open.
   window.addEventListener('resize', () => {
-    if (window.innerWidth >= 1024 && sidebar.classList.contains('is-open')) close()
+    if (window.innerWidth >= 1200 && sidebar.classList.contains('is-open')) close()
   })
 }
 

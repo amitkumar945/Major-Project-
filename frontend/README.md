@@ -21,7 +21,9 @@ them when the deadline is missed, and collects feedback once the work is done.
 
 ## 1. Running the project
 
-The backend serves this folder, so one server runs everything:
+The backend serves this folder, so one server runs everything. On Windows, double-click
+`start-server.bat` in this folder; it starts Flask and opens the app at **http://127.0.0.1:5000**.
+MongoDB must be running first. You can also start Flask from a terminal:
 
 ```bash
 cd backend
@@ -49,8 +51,9 @@ configured for this origin, and `services/mockApi.js` detects the port and calls
 
 | Command | What it does |
 |---|---|
-| `python ../backend/app.py` | Run the API **and** serve this folder on port 5000 |
-| `python -m http.server 5500` | Serve only the frontend (backend must run separately) |
+| `start-server.bat` (Windows) | Run the API **and** serve this folder on port 5000 |
+| `python ../backend/app.py` (from `frontend/`) | Run the API **and** serve this folder on port 5000 |
+| `python -m http.server 5500` | Serve only the frontend (start Flask separately on port 5000) |
 | `Ctrl + C` | Stop the server |
 
 ---

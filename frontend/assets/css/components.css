@@ -58,11 +58,11 @@
 .btn--danger { background: var(--red-600); color: #fff; }
 .btn--danger:not(:disabled):hover { background: var(--red-700); color: #fff; }
 
-.btn--success { background: var(--green-600); color: #fff; }
-.btn--success:not(:disabled):hover { background: var(--green-700); color: #fff; }
+.btn--success { background: var(--green-700); color: #fff; }
+.btn--success:not(:disabled):hover { background: var(--green-800); color: #fff; }
 
-.btn--warning { background: var(--amber-500); color: #fff; }
-.btn--warning:not(:disabled):hover { background: var(--amber-600); color: #fff; }
+.btn--warning { background: var(--amber-500); color: var(--slate-900); }
+.btn--warning:not(:disabled):hover { background: var(--amber-600); color: var(--slate-900); }
 
 .btn--link {
   background: none;
@@ -290,7 +290,7 @@ a.stat:hover, button.stat:hover { transform: translateY(-2px); }
 .field__control:focus {
   outline: none;
   border-color: var(--brand-500);
-  box-shadow: 0 0 0 3px rgb(79 70 229 / .15);
+  box-shadow: 0 0 0 3px rgb(29 78 216 / .15);
 }
 
 .field__control:disabled {

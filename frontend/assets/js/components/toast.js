@@ -39,6 +39,7 @@ function getRegion() {
 function show(variant, message, title) {
   const node = document.createElement('div')
   node.className = `toast toast--${variant}`
+  node.setAttribute('role', variant === 'error' ? 'alert' : 'status')
   node.innerHTML = `
     <span class="toast__icon">${icon(ICONS[variant], 'icon-lg')}</span>
     <div class="grow">

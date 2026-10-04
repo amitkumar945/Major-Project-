@@ -20,7 +20,7 @@
 
 import { esc, icon, mount, on, qs, setLoading } from './dom.js'
 import { hydrateMaps, mapPreview } from './complaintParts.js'
-import { CAMPUS_CENTER } from '../utils/constants.js'
+import { CAMPUS_CENTER, CAMPUS_ZOOM } from '../utils/constants.js'
 import { isInsideCampus } from '../utils/validators.js'
 
 /** Known campus landmarks, so the simulated fix gets a sensible address. */
@@ -150,7 +150,7 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
     applyErrors()
     // render() replaces the map node outright, so re-hydrate every time the
     // coordinates change.
-    hydrateMaps(node)
+    hydrateMaps(node, { centerOnPoint: false, zoom: CAMPUS_ZOOM.default })
   }
 
   function applyErrors() {
@@ -211,17 +211,15 @@ export function createLocationPicker(container, { onChange = () => {} } = {}) {
         const latitude = Number(position.coords.latitude.toFixed(6))
         const longitude = Number(position.coords.longitude.toFixed(6))
 
-        // A genuine fix from off campus cannot be used as a complaint location.
-        // Fall back to the campus centre and say so plainly, so the student can
-        // retry from the right spot rather than hitting a bare validation error
-        // at submit time. The point stays valid, so the form is never blocked.
+        // Keep the real fix intact; validateLocation() blocks moving forward
+        // and the warning explains why it cannot be submitted.
         if (!isInsideCampus(latitude, longitude)) {
           source = 'device'
           offCampus = true
           update({
-            latitude: CAMPUS_CENTER.latitude,
-            longitude: CAMPUS_CENTER.longitude,
-            accuracy: 0,
+            latitude,
+            longitude,
+            accuracy: Math.round(position.coords.accuracy),
           })
           return
         }

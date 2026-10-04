@@ -10,7 +10,7 @@ import { ROLES } from '../utils/constants.js'
 export const MENUS = {
   [ROLES.STUDENT]: [
     { label: 'Dashboard', href: '/student/dashboard.html', icon: 'dashboard' },
-    { label: 'Submit Complaint', href: '/student/new-complaint.html', icon: 'file-plus' },
+    { label: 'Submit a grievance', href: '/student/new-complaint.html', icon: 'file-plus' },
     { label: 'My Complaints', href: '/student/complaints.html', icon: 'clipboard-list' },
     { label: 'Track Complaint', href: '/track.html', icon: 'file-search' },
     { label: 'Notifications', href: '/student/notifications.html', icon: 'bell', badge: 'unread' },

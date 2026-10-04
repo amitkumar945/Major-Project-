@@ -144,7 +144,7 @@ input[type='date'] {
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
-  .modal__panel,
+  .modal,
   .sheet {
     padding-bottom: max(var(--sp-4), env(safe-area-inset-bottom));
   }
@@ -155,7 +155,7 @@ input[type='date'] {
 @media (max-width: 719px) {
   /* A centred desktop dialog becomes a bottom sheet: reachable one-handed,
      and it does not fight the on-screen keyboard. */
-  .modal__panel {
+  .modal {
     width: 100%;
     max-width: 100%;
     max-height: 92vh;
@@ -181,7 +181,7 @@ input[type='date'] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .modal__panel { animation: none; }
+  .modal { animation: none; }
 }
 
 /* ------------------------------------------------------------- 6. charts */
@@ -240,7 +240,7 @@ input[type='date'] {
   min-height: 48px;
   padding: 0 1.125rem;
 
-  background: var(--brand-600, #4f46e5);
+  background: var(--brand-600, #1d4ed8);
   color: #fff;
   border: 0;
   border-radius: 999px;
@@ -254,12 +254,26 @@ input[type='date'] {
   animation: install-in .3s ease-out;
 }
 
-#pwa-install:hover  { background: var(--brand-700, #4338ca); }
+#pwa-install:hover  { background: var(--brand-700, #1e40af); }
 #pwa-install:active { transform: scale(.97); }
 
 #pwa-install:focus-visible {
   outline: 3px solid var(--brand-300, #a5b4fc);
   outline-offset: 2px;
+}
+
+/* Keep the floating install action clear of Leaflet's attribution on the
+   phone/tablet map view while leaving the install action available. */
+@media (max-width: 1199px) {
+  body:has(.leaflet-container) #pwa-install {
+    position: static;
+    right: auto;
+    bottom: auto;
+    display: flex;
+    width: max-content;
+    max-width: calc(100% - 2rem);
+    margin: 1rem 1rem calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom, 0px) + 1rem) auto;
+  }
 }
 
 @keyframes install-in {

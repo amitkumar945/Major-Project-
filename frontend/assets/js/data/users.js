@@ -21,7 +21,7 @@ export const students = [
     year: '2nd Year',
     hostel: 'Gayatri Bhavan, Room 214',
     userType: 'Student',
-    avatarColor: '#4f46e5',
+    avatarColor: '#1d4ed8',
     joinedAt: '2024-07-21T04:30:00.000Z',
   },
   {
@@ -119,7 +119,7 @@ export const students = [
     year: '2nd Year',
     hostel: 'Devi Bhavan, Room 224',
     userType: 'Student',
-    avatarColor: '#4338ca',
+    avatarColor: '#1e40af',
     joinedAt: '2024-07-22T04:30:00.000Z',
   },
 ]

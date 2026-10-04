@@ -92,7 +92,7 @@ export function mapPreview({ latitude, longitude, address = '', accuracy = 0, ta
  *
  * @param {ParentNode} root  where to look for placeholders
  */
-export async function hydrateMaps(root = document) {
+export async function hydrateMaps(root = document, mapOptions = {}) {
   const nodes = [...root.querySelectorAll('[data-map]:not([data-map-ready])')]
   if (!nodes.length) return
 
@@ -116,6 +116,7 @@ export async function hydrateMaps(root = document) {
       node.dataset.mapReady = 'true'
 
       const map = await renderLocationMap(node, location, {
+        ...mapOptions,
         onFail: () => delete node.dataset.mapReady,
       })
 
@@ -359,7 +360,7 @@ export function officerCard(officer) {
 
   return html(
     '<div class="row" style="gap:.875rem">',
-    avatar(officer.name, '#4338ca', 'md'),
+    avatar(officer.name, '#1e40af', 'md'),
     '<div class="grow" style="min-width:0">',
     `<p class="strong truncate">${esc(officer.name)}</p>`,
     `<p class="muted truncate">${esc(officer.designation)}</p>`,

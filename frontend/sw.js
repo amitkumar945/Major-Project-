@@ -21,7 +21,7 @@
 // whose name does not end in this value, so a new version is what makes an
 // already-installed app pick up new CSS/JS instead of serving the old copy
 // cache-first (see `isShellAsset` below).
-const VERSION = 'v2';
+const VERSION = 'v6';
 const SHELL_CACHE = `dsvv-shell-${VERSION}`;
 const RUNTIME_CACHE = `dsvv-runtime-${VERSION}`;
 

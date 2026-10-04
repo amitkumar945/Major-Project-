@@ -13,8 +13,8 @@ import { CAMPUS_BOUNDS, CAMPUS_CENTER, CAMPUS_POLYGON, CAMPUS_ZOOM } from '../ut
 const LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
 const LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 
-const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+const TILE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+const TILE_ATTRIBUTION = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Sources: Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, Esri Japan, METI, Esri China (Hong Kong), Esri Korea, Esri (Thailand), NGCC, <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>, and the GIS User Community'
 
 /** Marker colours per priority, so the admin map reads at a glance. */
 const PRIORITY_COLORS = {
@@ -55,10 +55,10 @@ function campusMapOptions(L) {
 function addCampusBoundary(L, map) {
   try {
     return L.polygon(CAMPUS_POLYGON, {
-      color: '#4f46e5',
+      color: '#1d4ed8',
       weight: 2,
       opacity: 0.65,
-      fillColor: '#4f46e5',
+      fillColor: '#1d4ed8',
       fillOpacity: 0.05,
       interactive: false,
     }).addTo(map)
@@ -157,7 +157,7 @@ function isOnCampus(location) {
  * @param {object}      options     { zoom, interactive, onFail }
  * @returns {Promise<object|null>}  the Leaflet map, or null when unavailable
  */
-export async function renderLocationMap(node, location, { zoom = CAMPUS_ZOOM.point, interactive = true, onFail } = {}) {
+export async function renderLocationMap(node, location, { zoom = CAMPUS_ZOOM.point, interactive = true, centerOnPoint = true, onFail } = {}) {
   if (!node || !hasPoint(location)) return null
 
   let L
@@ -179,7 +179,7 @@ export async function renderLocationMap(node, location, { zoom = CAMPUS_ZOOM.poi
     // - the map immediately fights back to the boundary, which is the "wrong
     // place / zoomed out" view. The DSVV centre is the safe fallback.
     const onCampus = isOnCampus(location)
-    const centre = onCampus ? point : [CAMPUS_CENTER.latitude, CAMPUS_CENTER.longitude]
+    const centre = onCampus && centerOnPoint ? point : [CAMPUS_CENTER.latitude, CAMPUS_CENTER.longitude]
     const map = L.map(node, {
       ...campusMapOptions(L),
       center: centre,
@@ -203,9 +203,9 @@ export async function renderLocationMap(node, location, { zoom = CAMPUS_ZOOM.poi
       if (location.accuracy) {
         L.circle(point, {
           radius: Number(location.accuracy),
-          color: '#4f46e5',
+          color: '#1d4ed8',
           weight: 1,
-          fillColor: '#4f46e5',
+          fillColor: '#1d4ed8',
           fillOpacity: 0.15,
         }).addTo(map)
       }

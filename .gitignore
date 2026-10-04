@@ -1,8 +1,8 @@
 .vercel
 
 # Android TWA signing material - must never be committed.
-android-twa/android.keystore
-android-twa/*.keystore
-android-twa/*.jks
-android-twa/build/
-android-twa/.gradle/
+frontend/android-twa/android.keystore
+frontend/android-twa/*.keystore
+frontend/android-twa/*.jks
+frontend/android-twa/build/
+frontend/android-twa/.gradle/

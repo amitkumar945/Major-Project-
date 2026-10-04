@@ -4,10 +4,10 @@
  * complaints assigned to this officer.
  */
 
-import { icon, mount, qs, ready } from '../components/dom.js'
+import { esc, icon, mount, qs, ready } from '../components/dom.js'
 import { pageHeader, renderShell } from '../components/shell.js'
 import { requireRole } from '../components/session.js'
-import { errorState, progressBar, skeletonCards, statCard } from '../components/ui.js'
+import { complaintProgress, errorState, priorityBadge, progressBar, skeletonCards, statCard, statusBadge } from '../components/ui.js'
 import { complaintTable } from '../components/complaintTable.js'
 import { activateCharts, barChartV, chartCard, donutChart } from '../components/charts.js'
 import { getAllComplaints, getStatistics } from '../services/complaintService.js'
@@ -61,13 +61,14 @@ async function load(user) {
     lead: `${user.designation} · ${user.department}`,
   })
 
-  root.innerHTML = header + skeletonCards(6)
+  root.innerHTML = header + skeletonCards(8)
 
   try {
-    const [summary, complaints, officer] = await Promise.all([
+    const [summary, complaints, officer, departmentSummary] = await Promise.all([
       getStatistics({ officerId: user.id }),
       getAllComplaints({ officerId: user.id }),
       getOfficerById(user.id),
+      user.department ? getStatistics({ department: user.department }) : Promise.resolve(null),
     ])
 
     const statusCounts = complaints.reduce((acc, complaint) => {
@@ -89,20 +90,32 @@ async function load(user) {
     }))
 
     const statusTotal = statusData.reduce((sum, entry) => sum + entry.value, 0)
+    const urgentCount = complaints.filter((complaint) => complaint.priority?.toLowerCase() === 'urgent').length
+    const departmentStatusData = departmentSummary
+      ? STATUS_GROUPS.map((group) => ({
+        name: group.key,
+        value: group.members.reduce((total, status) => total + (departmentSummary.byStatus?.[status] ?? 0), 0),
+        color: group.color,
+      })).filter((entry) => entry.value > 0)
+      : []
+    const latest = complaints[0]
 
     root.innerHTML = `
       ${header}
-      <div class="stack">
-        <div class="grid grid-3">
+      <div class="dashboard-stats dashboard-stats--officer">
           ${statCard({ label: 'Assigned to me', value: summary.total, icon: 'clipboard-list', href: '/officer/complaints.html' })}
           ${statCard({ label: 'Pending', value: summary.pending, icon: 'clock', tone: 'warning', href: '/officer/complaints.html?status=Pending' })}
           ${statCard({ label: 'In Progress', value: summary.inProgress, icon: 'activity', tone: 'info', href: '/officer/complaints.html?status=In+Progress' })}
           ${statCard({ label: 'Resolved', value: summary.resolved, icon: 'check-circle', tone: 'success', href: '/officer/complaints.html?status=Resolved' })}
+          ${statCard({ label: 'Urgent', value: urgentCount, icon: 'alert-triangle', tone: 'danger', href: '/officer/complaints.html?priority=Urgent' })}
           ${statCard({ label: 'Overdue', value: summary.overdue, icon: 'alert-triangle', tone: 'danger', hint: 'Past the resolution deadline' })}
           ${statCard({ label: 'Escalated', value: summary.escalated, icon: 'shield-alert', tone: 'danger', href: '/officer/complaints.html?status=Escalated' })}
-        </div>
+          ${departmentSummary ? statCard({ label: 'Department Workload', value: departmentSummary.total, icon: 'building', tone: 'purple', hint: user.department }) : ''}
+      </div>
 
-        <div class="grid grid-3">
+      <div class="dashboard-section">
+        <div class="dashboard-section__head"><div><p class="dashboard-kicker">Work overview</p><h2>Complaint status and priorities</h2></div></div>
+        <div class="grid grid-3 dashboard-charts">
           ${chartCard({
             title: 'My complaints by status',
             subtitle: `${statusTotal} complaint${statusTotal === 1 ? '' : 's'} assigned`,
@@ -121,11 +134,29 @@ async function load(user) {
             tableRows: priorityData.map((entry) => [entry.name, entry.value]),
             empty: priorityData.every((entry) => entry.value === 0),
           })}
-
-          ${performanceCard(officer, summary)}
+          ${departmentSummary ? chartCard({
+            title: 'Department workload',
+            subtitle: `${departmentSummary.total} complaints · ${esc(user.department)}`,
+            chart: donutChart(departmentStatusData),
+            legend: departmentStatusData.map((entry) => ({ label: entry.name, color: entry.color, value: entry.value })),
+            tableHead: ['Status', 'Complaints'],
+            tableRows: departmentStatusData.map((entry) => [entry.name, entry.value]),
+            empty: departmentStatusData.length === 0,
+          }) : ''}
         </div>
+      </div>
 
-        <section class="card">
+      <div class="dashboard-officer-lower">
+        ${performanceCard(officer, summary)}
+        <section class="card dashboard-panel">
+          <header class="card__head"><div><h2 class="card__title">Complaint status timeline</h2><p class="card__subtitle">Most recently assigned complaint</p></div>${latest ? statusBadge(latest.status) : ''}</header>
+          <div class="card__body">
+            ${latest ? `<div class="dashboard-track__summary"><div><a class="dashboard-track__title" href="${DETAILS}?id=${encodeURIComponent(latest.id)}">${esc(latest.title)}</a><p class="muted">${esc(latest.id)}${latest.department ? ` · ${esc(latest.department)}` : ''}</p></div>${priorityBadge(latest.priority)}</div>${complaintProgress(latest)}<a class="dashboard-text-link" href="${DETAILS}?id=${encodeURIComponent(latest.id)}">Open complaint details${icon('arrow-right', 'icon-sm')}</a>` : '<p class="muted">No complaints are currently assigned to you.</p>'}
+          </div>
+        </section>
+      </div>
+
+      <section class="card dashboard-recent">
           <header class="card__head">
             <h2 class="card__title">Recently assigned</h2>
             <a class="btn btn--secondary btn--sm" href="/officer/complaints.html">
@@ -143,8 +174,7 @@ async function load(user) {
               emptyMessage: 'New complaints for your department will appear here.',
             })}
           </div>
-        </section>
-      </div>`
+      </section>`
 
     activateCharts(root)
   } catch (error) {
