@@ -683,6 +683,8 @@ def assign_officer(complaint_id: str, officer_id: str, actor: dict, reason: str 
 
 def change_priority(complaint_id: str, priority: str, actor: dict) -> dict:
     current = _get(complaint_id)
+    if not can_view(current, actor):
+        raise ApiException("You do not have permission to update this complaint.", 403)
     entry = _timeline_entry(
         f"Priority changed to {priority}",
         "The resolution deadline was recalculated from the new priority.",
@@ -703,6 +705,10 @@ def change_priority(complaint_id: str, priority: str, actor: dict) -> dict:
 
 def update_deadline(complaint_id: str, deadline: str, actor: dict) -> dict:
     from utils.helpers import parse_iso
+
+    current = _get(complaint_id)
+    if not can_view(current, actor):
+        raise ApiException("You do not have permission to update this complaint.", 403)
 
     parsed = parse_iso(deadline)
     if not parsed:

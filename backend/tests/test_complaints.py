@@ -500,6 +500,34 @@ def test_priority_change_recalculates_the_deadline(client, auth, admin_token, ma
     assert data["deadline"] != original
 
 
+def test_assigned_officer_can_change_priority(client, auth, officer_token, make_complaint):
+    """Department officers can adjust SLA priority for work in their queue."""
+    complaint = make_complaint()
+
+    response = client.put(
+        f"/api/complaints/{complaint['id']}/priority",
+        json={"priority": "Urgent"}, headers=auth(officer_token),
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["priority"] == "Urgent"
+
+
+def test_officer_cannot_change_priority_outside_their_department(client, auth, make_complaint):
+    complaint = make_complaint()
+    other_officer = client.post(
+        "/api/auth/login",
+        json={"identifier": "officer@dsvv.ac.in", "password": "officer123"},
+    ).get_json()["data"]["token"]
+
+    response = client.put(
+        f"/api/complaints/{complaint['id']}/priority",
+        json={"priority": "Urgent"}, headers=auth(other_officer),
+    )
+
+    assert response.status_code == 403
+
+
 def test_escalation_raises_the_level(client, auth, admin_token, make_complaint):
     complaint = make_complaint()
     response = client.post(

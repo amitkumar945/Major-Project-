@@ -343,7 +343,7 @@ def reassign(complaint_id):
 
 
 @bp.put("/<complaint_id>/priority")
-@role_required(ROLE_ADMIN)
+@role_required(ROLE_OFFICER, ROLE_ADMIN)
 def change_priority(complaint_id):
     values = request.get_json(silent=True) or {}
     priority = (values.get("priority") or "").strip()
