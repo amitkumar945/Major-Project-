@@ -260,6 +260,9 @@ class _ComplaintDetailsScreenState extends State<ComplaintDetailsScreen> {
             _row('Reference', complaint.id),
             _row('Category', complaint.category),
             _row('Department', complaint.department),
+            if (complaint.lab.isNotEmpty) _row('Lab', complaint.lab),
+            if (complaint.systemNumber.isNotEmpty)
+              _row('System Number', complaint.systemNumber),
             _row(
               'Submitted by',
               complaint.submittedByName.isEmpty

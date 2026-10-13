@@ -155,6 +155,8 @@ class Complaint {
     required this.department,
     required this.priority,
     required this.status,
+    this.lab = '',
+    this.systemNumber = '',
     this.location = const ComplaintLocation(),
     this.evidence = const [],
     this.timeline = const [],
@@ -183,6 +185,8 @@ class Complaint {
   final String department;
   final String priority;
   final String status;
+  final String lab;
+  final String systemNumber;
   final ComplaintLocation location;
   final List<Evidence> evidence;
   final List<TimelineEntry> timeline;
@@ -236,6 +240,8 @@ class Complaint {
       department: '${json['department'] ?? ''}',
       priority: '${json['priority'] ?? Domain.priorityMedium}',
       status: '${json['status'] ?? Domain.statusSubmitted}',
+      lab: '${json['lab'] ?? ''}',
+      systemNumber: '${json['systemNumber'] ?? ''}',
       location: json['location'] is Map<String, dynamic>
           ? ComplaintLocation.fromJson(json['location'] as Map<String, dynamic>)
           : const ComplaintLocation(),

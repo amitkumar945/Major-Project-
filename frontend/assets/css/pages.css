@@ -139,6 +139,41 @@
 .page-landing .navbar .btn--ghost { color: var(--dsvv-ink); }
 .page-landing .navbar .btn--ghost:hover { background: var(--dsvv-light); color: var(--dsvv); }
 
+/* Keep the university identity together on the left while links and sign-in
+   actions sit together on the right with a clear gap between the groups. */
+@media (min-width: 1100px) {
+  .page-landing .navbar__inner {
+    justify-content: flex-start;
+    gap: var(--sp-5);
+  }
+
+  .page-landing .navbar__inner > .logo {
+    flex: 0 0 auto;
+  }
+
+  .page-landing .navbar__links {
+    margin-left: auto;
+    gap: var(--sp-1);
+  }
+
+  .page-landing .navbar__actions {
+    margin-left: var(--sp-4);
+    gap: var(--sp-3);
+  }
+}
+
+/* At tablet widths use the existing menu so the long university name does
+   not crowd the navigation and authentication buttons. */
+@media (min-width: 900px) and (max-width: 1099px) {
+  .page-landing .navbar__links,
+  .page-landing .navbar__actions { display: none; }
+
+  .page-landing .navbar__toggle { display: inline-flex; }
+
+  .page-landing .navbar__mobile { display: none !important; }
+  .page-landing .navbar__mobile.is-open { display: block !important; }
+}
+
 /* Touch-friendly tap targets in the mobile menu. */
 @media (max-width: 900px) {
   .page-landing .navbar__mobile .navbar__link {
@@ -663,7 +698,7 @@
 }
 
 @media (min-width: 1080px) {
-  .landing .split { grid-template-columns: 1.55fr 1fr; gap: var(--sp-8); }
+  .landing .split { grid-template-columns: 1fr; gap: var(--sp-8); }
 }
 
 /*

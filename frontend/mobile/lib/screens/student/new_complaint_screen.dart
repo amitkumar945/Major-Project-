@@ -30,9 +30,11 @@ class NewComplaintScreen extends StatefulWidget {
 class _NewComplaintScreenState extends State<NewComplaintScreen> {
   final _title = TextEditingController();
   final _description = TextEditingController();
+  final _systemNumber = TextEditingController();
   final _scroll = ScrollController();
 
   String? _category;
+  String? _lab;
   ComplaintLocation? _location;
   List<File> _files = [];
 
@@ -49,6 +51,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     _debounce?.cancel();
     _title.dispose();
     _description.dispose();
+    _systemNumber.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -111,6 +114,12 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
     if (_category == null || _category!.isEmpty) {
       errors['category'] = 'Select a category';
     }
+    if (_category == 'Computer/Lab') {
+      if (_lab == null || _lab!.isEmpty) errors['lab'] = 'Select a lab';
+      if (_systemNumber.text.trim().isEmpty) {
+        errors['systemNumber'] = 'Enter the system number';
+      }
+    }
 
     if (_location == null || !_location!.hasCoordinates) {
       errors['location'] = 'Choose the complaint location on the map';
@@ -164,6 +173,12 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
         title: _title.text,
         description: _description.text,
         category: _category!,
+        department: _category == 'Computer/Lab'
+            ? Domain.categoryDepartment[_category!]
+            : null,
+        lab: _category == 'Computer/Lab' ? _lab : null,
+        systemNumber:
+            _category == 'Computer/Lab' ? _systemNumber.text.trim() : null,
         location: _location!,
         files: _files,
       );
@@ -215,8 +230,7 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
             ),
             const SizedBox(height: 14),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.slate100,
                 borderRadius: BorderRadius.circular(10),
@@ -301,7 +315,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 ),
                 const SizedBox(height: 16),
               ],
-
               AppTextField(
                 controller: _title,
                 label: 'What is the problem?',
@@ -318,7 +331,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 },
               ),
               const SizedBox(height: 20),
-
               AppTextField(
                 controller: _description,
                 label: 'Describe it in detail',
@@ -337,7 +349,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 },
               ),
               const SizedBox(height: 20),
-
               AppDropdown<String>(
                 label: 'Category',
                 value: _category,
@@ -350,19 +361,49 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                         setState(() {
                           _category = value;
                           _fieldErrors.remove('category');
+                          if (value != 'Computer/Lab') {
+                            _lab = null;
+                            _systemNumber.clear();
+                            _fieldErrors.remove('lab');
+                            _fieldErrors.remove('systemNumber');
+                          }
                         });
                         _scheduleAnalysis();
                       },
               ),
-
+              if (_category == 'Computer/Lab') ...[
+                const SizedBox(height: 20),
+                AppDropdown<String>(
+                  label: 'Select Lab',
+                  value: _lab,
+                  hint: 'Choose BCA, BIT, or MCA Lab',
+                  items: const ['BCA Lab', 'BIT Lab', 'MCA Lab'],
+                  errorText: _fieldErrors['lab'],
+                  onChanged: _submitting
+                      ? (_) {}
+                      : (value) => setState(() {
+                            _lab = value;
+                            _fieldErrors.remove('lab');
+                          }),
+                ),
+                const SizedBox(height: 20),
+                AppTextField(
+                  controller: _systemNumber,
+                  label: 'System Number',
+                  hint: 'e.g. System 01',
+                  maxLength: 50,
+                  errorText: _fieldErrors['systemNumber'],
+                  enabled: !_submitting,
+                  onChanged: (_) =>
+                      setState(() => _fieldErrors.remove('systemNumber')),
+                ),
+              ],
               if (_analysing || _analysis != null) ...[
                 const SizedBox(height: 16),
                 _analysisCard(),
               ],
-
               const SizedBox(height: 24),
               _locationField(),
-
               const SizedBox(height: 24),
               ImagePickerField(
                 files: _files,
@@ -370,7 +411,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                 helper:
                     'A photo helps the team understand the problem quickly.',
               ),
-
               const SizedBox(height: 32),
               FilledButton(
                 onPressed: _submitting ? null : _submit,
@@ -409,8 +449,8 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
                       padding: EdgeInsets.symmetric(vertical: 6),
                       child: Text(
                         'Checking which department should handle this...',
-                        style: TextStyle(
-                            fontSize: 14, color: AppColors.slate500),
+                        style:
+                            TextStyle(fontSize: 14, color: AppColors.slate500),
                       ),
                     )
                   : Column(
@@ -485,7 +525,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
           style: TextStyle(fontSize: 13, color: AppColors.slate500),
         ),
         const SizedBox(height: 10),
-
         InkWell(
           onTap: _submitting ? null : _pickLocation,
           borderRadius: BorderRadius.circular(AppTheme.fieldRadius),
@@ -546,7 +585,6 @@ class _NewComplaintScreenState extends State<NewComplaintScreen> {
             ),
           ),
         ),
-
         if (error != null) ...[
           const SizedBox(height: 6),
           Text(

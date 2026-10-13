@@ -125,6 +125,9 @@ export async function createComplaint(payload, user) {
     category: payload.category,
     department: payload.department ?? '',
     location: payload.location ?? {},
+    ...(payload.category === 'Computer/Lab'
+      ? { lab: payload.lab ?? '', systemNumber: payload.systemNumber ?? '' }
+      : {}),
   }
 
   if (files.length) {

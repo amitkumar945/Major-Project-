@@ -59,6 +59,8 @@ const draft = {
   description: '',
   category: '',
   department: '',
+  lab: '',
+  systemNumber: '',
   evidence: [],
   location: { latitude: null, longitude: null, address: '', block: '', accuracy: 0 },
   ai: null,
@@ -130,6 +132,21 @@ function detailsStep() {
               `<option value="${esc(category)}" ${draft.category === category ? 'selected' : ''}>${esc(category)}</option>`,
           ).join('')}
         </select>
+      </div>
+
+      <div id="computer-lab-fields" class="stack-sm" ${isComputerLabComplaint(draft) ? '' : 'hidden'}>
+        <div class="field" data-field="lab">
+          <label class="field__label" for="lab">Select Lab<span class="field__req">*</span></label>
+          <select class="field__control" id="lab" name="lab">
+            <option value="">Choose a lab</option>
+            ${['BCA Lab', 'BIT Lab', 'MCA Lab'].map((lab) => `<option value="${lab}" ${draft.lab === lab ? 'selected' : ''}>${lab}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" data-field="systemNumber">
+          <label class="field__label" for="systemNumber">System Number<span class="field__req">*</span></label>
+          <input type="text" class="field__control" id="systemNumber" name="systemNumber" maxlength="50" value="${esc(draft.systemNumber)}" placeholder="e.g. System 01">
+          <p class="field__hint">Enter the label of the affected computer.</p>
+        </div>
       </div>
 
       <!-- Department is still a real, required field submitted to the API exactly
@@ -220,6 +237,8 @@ function reviewStep() {
             ${infoRow('Details', esc(draft.description))}
             ${infoRow('Category', esc(draft.category))}
             ${infoRow('Department', esc(draft.ai?.department ?? draft.department))}
+            ${isComputerLabComplaint(draft) ? infoRow('Lab', esc(draft.lab)) : ''}
+            ${isComputerLabComplaint(draft) ? infoRow('System Number', esc(draft.systemNumber)) : ''}
             ${infoRow('Priority', draft.ai ? priorityBadge(draft.ai.priority) : '<span class="muted">Will be set on submission</span>')}
             ${infoRow('Location', esc(draft.location.address || '—'))}
             ${infoRow('Photos', `<ul class="stack-sm" style="gap:.25rem">${files}</ul>`)}
@@ -293,18 +312,57 @@ function render() {
   // has to pick one. It stops overwriting as soon as they choose their own.
   if (step === 0) {
     on('#details-form', 'change', '#category', (event) => {
+      draft.category = event.target.value
       const departmentSelect = qs('#department')
       if (!draft.departmentTouched) {
         departmentSelect.value = CATEGORY_DEPARTMENT_MAP[event.target.value] ?? ''
         draft.department = departmentSelect.value
       }
+      syncComputerLabFields(event.target.value)
     })
 
     on('#details-form', 'change', '#department', (event) => {
       draft.departmentTouched = true
       draft.department = event.target.value
+      clearFieldError('department')
+      syncComputerLabFields()
     })
+    on('#details-form', 'change', '#lab', (event) => { draft.lab = event.target.value })
+    on('#details-form', 'input', '#systemNumber', (event) => { draft.systemNumber = event.target.value })
+    syncComputerLabFields(draft.category)
   }
+}
+
+function isComputerLabComplaint(values) {
+  // Computer/Lab is the existing category mapped exclusively to the CS lab.
+  return values.category === 'Computer/Lab'
+}
+
+function syncComputerLabFields(category = qs('#category')?.value ?? draft.category) {
+  const fields = qs('#computer-lab-fields')
+  const isComputerLab = isComputerLabComplaint({ category })
+  if (fields) fields.hidden = !isComputerLab
+
+  const lab = qs('#lab')
+  const systemNumber = qs('#systemNumber')
+  if (lab) lab.required = isComputerLab
+  if (systemNumber) systemNumber.required = isComputerLab
+
+  if (!isComputerLab) {
+    draft.lab = ''
+    draft.systemNumber = ''
+    if (lab) lab.value = ''
+    if (systemNumber) systemNumber.value = ''
+  }
+}
+
+function clearFieldError(name) {
+  const form = qs('#details-form')
+  const wrapper = qs(`[data-field="${name}"]`, form)
+  const control = qs('.field__control', wrapper)
+  qs('.field__error', wrapper)?.remove()
+  control?.classList.remove('field__control--error')
+  control?.setAttribute('aria-invalid', 'false')
 }
 
 /* ------------------------------------------------------------ navigation */
@@ -318,6 +376,8 @@ function captureStep() {
       draft.description = qs('#description', form).value.trim()
       draft.category = qs('#category', form).value
       draft.department = qs('#department', form).value
+      draft.lab = qs('#lab', form)?.value ?? draft.lab
+      draft.systemNumber = qs('#systemNumber', form)?.value ?? draft.systemNumber
 
       // The department select lives inside a collapsed panel, so a student who
       // never opens it would otherwise leave this required field empty. Fall
@@ -337,6 +397,10 @@ function validateStep() {
     const form = qs('#details-form')
     clearErrors(form)
     const errors = validateComplaintDetails(draft)
+    if (isComputerLabComplaint(draft)) {
+      if (!['BCA Lab', 'BIT Lab', 'MCA Lab'].includes(draft.lab)) errors.lab = 'Select a lab'
+      if (!draft.systemNumber.trim()) errors.systemNumber = 'Enter the system number'
+    }
     if (!isValid(errors)) {
       showErrors(form, errors)
       return false
@@ -353,7 +417,12 @@ function validateStep() {
   }
 
   if (step === 3 && !draft.ai) {
-    toast.warning('Tap "Start check" so we can send this to the right department.', 'One thing left')
+    toast.warning(
+      analysing
+        ? 'The automatic check is still running. Please wait for it to finish.'
+        : 'Run the check so we can send this to the right department.',
+      'One thing left',
+    )
     return false
   }
 
@@ -361,6 +430,8 @@ function validateStep() {
 }
 
 async function runAnalysis() {
+  if (analysing) return
+
   analysing = true
   aiError = ''
   render()
@@ -479,7 +550,8 @@ ready(() => {
     captureStep()
     if (!validateStep()) return
     step = Math.min(step + 1, STEPS.length - 1)
-    render()
+    if (step === 3 && !draft.ai) runAnalysis()
+    else render()
     window.scrollTo({ top: 0, behavior: 'smooth' })
   })
 

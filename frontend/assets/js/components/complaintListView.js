@@ -58,6 +58,7 @@ export function createComplaintList({
     search: params.search ?? '',
     department: params.department ?? '',
     status: params.status ?? '',
+    statusGroup: params.statusGroup ?? '',
     priority: params.priority ?? '',
     category: params.category ?? '',
     dateFrom: params.dateFrom ?? '',
@@ -105,7 +106,14 @@ export function createComplaintList({
     }
 
     activateFilters(node, filters, (next) => {
-      filters = next
+      filters = {
+        ...next,
+        // Choosing an exact status in the dropdown replaces a dashboard
+        // status group; unrelated filters keep the group active.
+        statusGroup: next.statusGroup === '' || next.status !== filters.status
+          ? ''
+          : filters.statusGroup,
+      }
       load()
     })
 
@@ -128,6 +136,7 @@ export function createComplaintList({
         search: filters.search,
         department: filters.department,
         status: filters.status,
+        statusGroup: filters.statusGroup,
         priority: filters.priority,
         category: filters.category,
         dateFrom: filters.dateFrom,

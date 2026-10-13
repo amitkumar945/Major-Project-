@@ -34,7 +34,14 @@ export function filterPanel({
   const active = countedKeys.filter((key) => {
     const value = filters[key]
     return typeof value === 'string' ? value.trim() !== '' : Boolean(value)
-  }).length
+  }).length + (filters.statusGroup ? 1 : 0)
+
+  const statusGroupLabels = {
+    pending: 'Pending (Submitted, Under Review, Pending)',
+    'in-progress': 'In Progress (Accepted, In Progress)',
+    resolved: 'Resolved (Resolved, Closed)',
+  }
+  const statusGroupLabel = statusGroupLabels[filters.statusGroup]
 
   const selects = fields
     .map(
@@ -119,6 +126,8 @@ export function filterPanel({
 
       <div class="filters__grid">${selects}${dates}</div>
 
+      ${statusGroupLabel ? `<p class="muted" style="margin-top:var(--sp-3)">Showing status group: ${esc(statusGroupLabel)}</p>` : ''}
+
       ${
         active
           ? `<p class="muted" style="margin-top:var(--sp-3);display:flex;align-items:center;gap:.375rem">
@@ -164,7 +173,7 @@ export function activateFilters(scope, filters, onChange) {
      started with, so later spreads and the query-string sync still see every
      field. */
   on(panel, 'click', '[data-reset-filters]', () => {
-    const cleared = { ...filters }
+    const cleared = { ...filters, statusGroup: '' }
     qsa('[data-filter]', panel).forEach((control) => {
       if (control.dataset.filter !== 'search') cleared[control.dataset.filter] = ''
     })

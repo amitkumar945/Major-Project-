@@ -125,6 +125,8 @@ function detailsView() {
     '<div class="info-list" style="margin-top:var(--sp-5)">',
     infoRow('Department', esc(complaint.department)),
     infoRow('Category', esc(complaint.category)),
+    complaint.lab ? infoRow('Lab', esc(complaint.lab)) : '',
+    complaint.systemNumber ? infoRow('System Number', esc(complaint.systemNumber)) : '',
     infoRow('Location', esc(complaint.location?.address ?? '—')),
     infoRow('Campus zone', esc(complaint.location?.block || '—')),
     infoRow('Submitted on', esc(formatDateTime(complaint.submittedAt))),

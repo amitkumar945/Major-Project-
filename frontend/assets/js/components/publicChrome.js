@@ -13,7 +13,6 @@ import {
   ASSETS,
   CONTACT,
   UNIVERSITY_NAME,
-  UNIVERSITY_SHORT,
 } from '../utils/constants.js'
 
 const LINKS = [
@@ -27,18 +26,13 @@ const LINKS = [
 /**
  * The DSVV crest.
  *
- * `ASSETS.logo` is the official crest. The markup also renders a CSS
- * placeholder mark underneath the image, and
- * `onerror` removes the image if the file is ever missing, so the placeholder
- * shows through instead of a broken-image icon.
+ * `ASSETS.logo` is the official crest displayed in the shared logo mark.
  */
 function logoMark() {
   return `
     <span class="logo__mark-wrap">
-      <span class="logo__mark logo__mark--placeholder" aria-hidden="true">${esc(UNIVERSITY_SHORT)}</span>
       <img class="logo__img" src="${esc(ASSETS.logo)}" alt="${esc(UNIVERSITY_NAME)} logo"
-           width="44" height="44" loading="eager"
-           onerror="this.remove()">
+           width="44" height="44" loading="eager" onerror="this.hidden=true">
     </span>`
 }
 

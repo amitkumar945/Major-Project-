@@ -28,60 +28,25 @@
 .logo--sm .logo__mark { width: 2rem; height: 2rem; }
 .logo--sm .logo__name { font-size: var(--fs-base); }
 
-/* --------------------------------------------------- logo placeholder ---
-   The CSS placeholder mark sits underneath and the image in
-  `assets/img/dsvv-logo.svg` (the official crest) is layered on top. Replacing
-   that file swaps the mark on every page. If the file is ever missing the
-   <img> removes itself and the placeholder shows through — never a
-   broken-image icon, and never an invented crest.
-   See `assets/img/README.md`.
-   ----------------------------------------------------------------------- */
-
 .logo__mark-wrap {
   position: relative;
   display: inline-flex;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 3rem;
+  height: 3rem;
   flex: none;
 }
-.logo--sm .logo__mark-wrap { width: 2.25rem; height: 2.25rem; }
+.logo--sm .logo__mark-wrap { width: 2.5rem; height: 2.5rem; }
 
-.logo__mark-wrap .logo__mark {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-}
-
-.logo__mark--placeholder {
-  background: var(--surface);
-  border: 1px dashed var(--slate-300);
-  color: var(--text-faint);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: .04em;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.logo--light .logo__mark--placeholder {
-  background: rgb(255 255 255 / .1);
-  border-color: rgb(255 255 255 / .4);
-  color: rgb(255 255 255 / .8);
-  box-shadow: none;
-}
-
-/* The real crest, layered over the placeholder. */
+/* Keep the complete crest visible within the existing logo footprint. */
 .logo__img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: 50%;
-  background: #fff;
+  border-radius: 0;
+  background: transparent;
 }
-.logo--light .logo__img { background: transparent; }
 
 /* =============================================================== NAVBAR === */
 
@@ -383,10 +348,16 @@
    even though the shared `logo--light` modifier is still on the markup (the
    auth aside still needs that modifier as-is). */
 .sidebar .logo--light .logo__mark { background: transparent; box-shadow: none; }
-.sidebar .logo--light .logo__name { color: #fff; }
+.sidebar .logo--light .logo__name {
+  color: #fff;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
 .sidebar .logo--light .logo__sub  { color: rgb(255 255 255 / .65); }
 .sidebar .sidebar__close { color: rgb(255 255 255 / .76) !important; }
-.sidebar__brand-logo { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+.sidebar .logo--sm .logo__mark { width: 2.5rem; height: 2.5rem; flex: none; }
+.sidebar__brand-logo { width: 100%; height: 100%; object-fit: contain; border-radius: 0; }
 
 /* dark overlay behind the drawer on small screens */
 .sidebar-overlay {

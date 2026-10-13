@@ -67,6 +67,8 @@ function resultView(complaint) {
           <div class="info-list">
             ${infoRow('Department', esc(complaint.department))}
             ${infoRow('Category', esc(complaint.category))}
+            ${complaint.lab ? infoRow('Lab', esc(complaint.lab)) : ''}
+            ${complaint.systemNumber ? infoRow('System Number', esc(complaint.systemNumber)) : ''}
             ${infoRow('Location', esc(complaint.location?.address ?? '—'))}
             ${infoRow('Submitted on', esc(formatDateTime(complaint.submittedAt)))}
             ${infoRow('Last updated', esc(formatDateTime(complaint.updatedAt)))}

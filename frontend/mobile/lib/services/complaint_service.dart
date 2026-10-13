@@ -29,6 +29,8 @@ class ComplaintService {
     List<File> files = const [],
     String? department,
     String? priority,
+    String? lab,
+    String? systemNumber,
   }) async {
     final fields = <String, dynamic>{
       'title': title.trim(),
@@ -36,6 +38,9 @@ class ComplaintService {
       'category': category,
       'location': location.toJson(),
       if (department != null && department.isNotEmpty) 'department': department,
+      if (lab != null && lab.isNotEmpty) 'lab': lab,
+      if (systemNumber != null && systemNumber.isNotEmpty)
+        'systemNumber': systemNumber,
       if (priority != null && priority.isNotEmpty) 'priority': priority,
     };
 

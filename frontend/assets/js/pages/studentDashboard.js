@@ -156,9 +156,9 @@ async function load(user) {
       ${welcome(user)}
       <section class="dashboard-stats" aria-label="Complaint overview">
         ${statCard({ label: 'Total Complaints', value: summary.total, icon: 'clipboard-list', href: '/student/complaints.html' })}
-        ${statCard({ label: 'Pending', value: summary.pending, icon: 'clock', tone: 'warning', href: '/student/complaints.html?status=Pending' })}
-        ${statCard({ label: 'In Progress', value: summary.inProgress, icon: 'activity', tone: 'info', href: '/student/complaints.html?status=In+Progress' })}
-        ${statCard({ label: 'Resolved', value: summary.resolved, icon: 'check-circle', tone: 'success', href: '/student/complaints.html?status=Resolved' })}
+        ${statCard({ label: 'Pending', value: summary.pending, icon: 'clock', tone: 'warning', href: '/student/complaints.html?statusGroup=pending' })}
+        ${statCard({ label: 'In Progress', value: summary.inProgress, icon: 'activity', tone: 'info', href: '/student/complaints.html?statusGroup=in-progress' })}
+        ${statCard({ label: 'Resolved', value: summary.resolved, icon: 'check-circle', tone: 'success', href: '/student/complaints.html?statusGroup=resolved' })}
         ${statCard({ label: 'Urgent', value: urgentCount, icon: 'alert-triangle', tone: 'danger', href: '/student/complaints.html?priority=Urgent' })}
         ${statCard({ label: 'Feedback Pending', value: feedbackPending, icon: 'star', tone: 'purple', href: '/student/feedback.html' })}
         ${statCard({ label: 'Reopened', value: summary.reopened, icon: 'rotate-ccw', tone: 'purple', href: '/student/complaints.html?status=Reopened' })}
