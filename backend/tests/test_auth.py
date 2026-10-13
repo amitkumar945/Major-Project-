@@ -2,6 +2,8 @@
 
 import uuid
 
+import pytest
+
 
 def _email():
     return f"pytest.{uuid.uuid4().hex[:10]}@dsvv.ac.in"
@@ -29,6 +31,79 @@ def test_register_creates_account_and_returns_token(client):
     assert body["success"] is True
     assert body["data"]["token"]
     assert body["data"]["user"]["role"] == "student"
+
+
+def test_registration_credentials_can_be_used_to_login(client, app):
+    """Registration and a later login use the same normalized email and hash."""
+    values = _registration(email="  New.User@DSVV.ac.in  ", userType="Staff")
+    registered = client.post("/api/auth/register", json=values)
+
+    assert registered.status_code == 201, registered.get_json()
+    assert registered.get_json()["data"]["user"]["role"] == "student"
+    assert registered.get_json()["data"]["user"]["userType"] == "Staff"
+
+    with app.app_context():
+        from database import users
+
+        record = users().find_one({"email": "new.user@dsvv.ac.in"})
+    assert record is not None
+    assert record["passwordHash"] != values["password"]
+
+    logged_in = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": " NEW.USER@DSVV.AC.IN ",
+            "password": values["password"],
+            "role": "student",
+        },
+    )
+    assert logged_in.status_code == 200, logged_in.get_json()
+    assert logged_in.get_json()["data"]["user"]["email"] == "new.user@dsvv.ac.in"
+
+
+def test_registered_account_rejects_incorrect_password(client):
+    values = _registration()
+    assert client.post("/api/auth/register", json=values).status_code == 201
+
+    response = client.post(
+        "/api/auth/login",
+        json={"identifier": values["email"], "password": "NotThePassword123"},
+    )
+    assert response.status_code == 401
+    assert response.get_json()["message"] == "Incorrect email or password."
+
+
+def test_role_mismatch_is_reported_after_valid_password(client):
+    values = _registration()
+    assert client.post("/api/auth/register", json=values).status_code == 201
+
+    response = client.post(
+        "/api/auth/login",
+        json={
+            "identifier": values["email"],
+            "password": values["password"],
+            "role": "officer",
+        },
+    )
+    assert response.status_code == 403
+    assert "correct login type" in response.get_json()["message"]
+
+
+@pytest.mark.parametrize(
+    ("email", "password", "role"),
+    [
+        ("student@dsvv.ac.in", "student123", "student"),
+        ("pankaj.semwal@dsvv.ac.in", "officer123", "officer"),
+        ("admin@dsvv.ac.in", "admin123", "admin"),
+    ],
+)
+def test_login_accepts_each_supported_role(client, email, password, role):
+    response = client.post(
+        "/api/auth/login",
+        json={"identifier": email, "password": password, "role": role},
+    )
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()["data"]["user"]["role"] == role
 
 
 def test_register_never_returns_the_password_hash(client):

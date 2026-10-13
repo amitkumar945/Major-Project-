@@ -43,6 +43,8 @@ COMPLAINT_COLUMNS = [
     ("Resolved At", "resolvedAt"),
     ("Escalation Level", "escalationLevel"),
     ("Rating", "feedback.rating"),
+    ("Lab", "lab"),
+    ("System Number", "systemNumber"),
 ]
 
 

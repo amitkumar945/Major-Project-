@@ -58,7 +58,7 @@ def create_app(config_object=None) -> Flask:
             "OTP_DEV_MODE=true was ignored: codes are only returned in a "
             "development or test environment. Set OTP_DEV_MODE=false to "
             "silence this, and configure MAIL_* so codes can be delivered."
-        )
+        ) 
 
     # ----------------------------------------------------------------- mail
     # Report the SMTP settings once at startup so a misconfigured `.env` is

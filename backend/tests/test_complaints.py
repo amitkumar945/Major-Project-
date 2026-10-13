@@ -56,6 +56,103 @@ def test_client_cannot_dictate_its_own_priority(client, auth, student_token, wat
     assert response.get_json()["data"]["priority"] != "Low"
 
 
+def test_computer_lab_complaints_require_lab_and_system(client, auth, student_token, water_complaint):
+    base_payload = {
+        **water_complaint,
+        "title": "Computer system will not start",
+        "description": "The affected computer will not start during the practical session.",
+        "category": "Computer/Lab",
+        "department": "MCA Lab / Computer Lab",
+        "lab": "BCA Lab",
+        "systemNumber": "System 15",
+    }
+
+    for missing_fields in (("lab",), ("systemNumber",), ("lab", "systemNumber")):
+        payload = {**base_payload}
+        for field in missing_fields:
+            payload.pop(field)
+        response = client.post("/api/complaints", json=payload, headers=auth(student_token))
+        assert response.status_code == 422
+        assert set(response.get_json()["error"]["fields"]) == set(missing_fields)
+
+
+def test_computer_lab_and_system_number_persist_and_track(client, auth, student_token, water_complaint):
+    for lab in ("BCA Lab", "BIT Lab", "MCA Lab"):
+        payload = {
+            **water_complaint,
+            "title": f"Computer system issue in {lab}",
+            "description": "The affected computer is not working during the practical session.",
+            "category": "Computer/Lab",
+            "department": "MCA Lab / Computer Lab",
+            "lab": lab,
+            "systemNumber": "System 15",
+        }
+        response = client.post("/api/complaints", json=payload, headers=auth(student_token))
+        assert response.status_code == 201
+        complaint = response.get_json()["data"]
+        assert complaint["lab"] == lab
+        assert complaint["systemNumber"] == "System 15"
+
+        details = client.get(f"/api/complaints/{complaint['id']}", headers=auth(student_token))
+        assert details.get_json()["data"]["lab"] == lab
+        assert details.get_json()["data"]["systemNumber"] == "System 15"
+
+        tracked = client.get(f"/api/complaints/track/{complaint['id']}").get_json()["data"]
+        assert tracked["lab"] == lab
+        assert tracked["systemNumber"] == "System 15"
+
+        filtered = client.get(
+            f"/api/complaints?lab={lab.replace(' ', '%20')}&systemNumber=System%2015",
+            headers=auth(student_token),
+        ).get_json()["data"]["items"]
+        assert any(item["id"] == complaint["id"] for item in filtered)
+
+
+def test_computer_lab_fields_persist_when_classifier_routes_to_another_department(
+    client, auth, student_token, water_complaint
+):
+    payload = {
+        **water_complaint,
+        "title": "Computer/Lab water leak near the server rack",
+        "description": "Water is leaking from the pipeline beside the computer lab server rack.",
+        "category": "Computer/Lab",
+        "department": "MCA Lab / Computer Lab",
+        "lab": "BCA Lab",
+        "systemNumber": "System 12",
+    }
+    response = client.post("/api/complaints", json=payload, headers=auth(student_token))
+
+    assert response.status_code == 201, response.get_json()
+    complaint = response.get_json()["data"]
+    assert complaint["department"] == "Jal Kal Vibhag"
+    assert complaint["lab"] == "BCA Lab"
+    assert complaint["systemNumber"] == "System 12"
+
+    tracked = client.get(f"/api/complaints/track/{complaint['id']}").get_json()["data"]
+    assert tracked["lab"] == "BCA Lab"
+    assert tracked["systemNumber"] == "System 12"
+
+
+def test_other_categories_do_not_store_computer_lab_fields(
+    client, auth, student_token, water_complaint
+):
+    for category in ("Water", "Electricity", "Building", "Hostel", "Classroom", "Other"):
+        payload = {
+            **water_complaint,
+            "title": f"General campus issue for {category}",
+            "description": "A general campus facility issue needs inspection and repair.",
+            "category": category,
+            "lab": "BCA Lab",
+            "systemNumber": "System 12",
+        }
+        response = client.post("/api/complaints", json=payload, headers=auth(student_token))
+        assert response.status_code == 201, response.get_json()
+        complaint = response.get_json()["data"]
+        assert complaint["category"] == category
+        assert "lab" not in complaint
+        assert "systemNumber" not in complaint
+
+
 # ------------------------------------------------------------------ reading
 
 
@@ -92,6 +189,90 @@ def test_filters_and_pagination(client, auth, student_token, make_complaint):
     assert len(data["items"]) == 1
     assert data["total"] >= 2
     assert data["totalPages"] >= 2
+
+
+def test_dashboard_status_group_filters_match_summary_counts(
+    client, auth, student_token, admin_token, make_complaint
+):
+    """Dashboard status groups open a list containing every counted status."""
+    groups = {
+        "pending": ["Submitted", "Under Review", "Pending"],
+        "in-progress": ["Accepted", "In Progress"],
+        "resolved": ["Resolved", "Closed"],
+    }
+
+    for statuses in groups.values():
+        for status in statuses:
+            complaint = make_complaint()
+            changed = client.put(
+                f"/api/complaints/{complaint['id']}/status",
+                json={"status": status},
+                headers=auth(admin_token),
+            )
+            assert changed.status_code == 200, changed.get_json()
+
+    summary = client.get("/api/complaints/statistics", headers=auth(student_token)).get_json()["data"]
+    counters = {"pending": "pending", "in-progress": "inProgress", "resolved": "resolved"}
+
+    for group, statuses in groups.items():
+        response = client.get(
+            f"/api/complaints?statusGroup={group}", headers=auth(student_token)
+        )
+        data = response.get_json()["data"]
+        assert response.status_code == 200
+        assert data["total"] == summary[counters[group]] == len(statuses)
+        assert {item["status"] for item in data["items"]} == set(statuses)
+
+    # The existing dropdown filter remains an exact single-status match.
+    exact = client.get("/api/complaints?status=Pending", headers=auth(student_token))
+    assert exact.get_json()["data"]["total"] == 1
+
+
+def test_dashboard_feedback_urgent_and_reopened_counts_follow_records(
+    client, auth, student_token, officer_token, admin_token, make_complaint
+):
+    rated = make_complaint()
+    pending_feedback = make_complaint()
+    reopened = make_complaint()
+    urgent = make_complaint()
+
+    changed_priority = client.put(
+        f"/api/complaints/{urgent['id']}/priority",
+        json={"priority": "Urgent"},
+        headers=auth(admin_token),
+    )
+    assert changed_priority.status_code == 200
+
+    for complaint in (rated, pending_feedback, reopened):
+        assert _resolve(client, auth, officer_token, complaint["id"]).status_code == 200
+
+    submitted_feedback = client.post(
+        f"/api/complaints/{rated['id']}/feedback",
+        json={"rating": 5, "comment": "Resolved correctly."},
+        headers=auth(student_token),
+    )
+    assert submitted_feedback.status_code == 201
+
+    reopened_response = client.post(
+        f"/api/complaints/{reopened['id']}/reopen",
+        json={"reason": "The problem came back."},
+        headers=auth(student_token),
+    )
+    assert reopened_response.status_code == 200
+
+    summary = client.get("/api/complaints/statistics", headers=auth(student_token)).get_json()["data"]
+    feedback = client.get("/api/feedback/my", headers=auth(student_token)).get_json()["data"]
+    all_complaints = client.get("/api/complaints", headers=auth(student_token)).get_json()["data"]
+    urgent_list = client.get("/api/complaints?priority=Urgent", headers=auth(student_token)).get_json()["data"]
+    reopened_list = client.get("/api/complaints?status=Reopened", headers=auth(student_token)).get_json()["data"]
+    resolved_list = client.get("/api/complaints?statusGroup=resolved", headers=auth(student_token)).get_json()["data"]
+
+    assert summary["total"] == all_complaints["total"] == 4
+    assert summary["resolved"] == resolved_list["total"] == 2
+    assert summary["reopened"] == reopened_list["total"] == 1
+    assert len([item for item in all_complaints["items"] if item["priority"] == "Urgent"]) == urgent_list["total"] == 1
+    assert feedback["pendingCount"] == 1
+    assert feedback["givenCount"] == 1
 
 
 def test_search_matches_the_title(client, auth, student_token, make_complaint):

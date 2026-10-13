@@ -233,6 +233,10 @@ class TestConfig(Config):
     """Used by the test-suite: separate database, no seeding, OTP in dev mode."""
 
     MONGO_URI = _str("TEST_MONGO_URI", "mongodb://localhost:27017/grievance_management_test")
+    # The test URI already selects its database. Never inherit MONGO_DB_NAME
+    # from a developer/deployment environment, which would redirect the test
+    # fixture's database cleanup to that configured database.
+    MONGO_DB_NAME = ""
     JWT_SECRET_KEY = _str("JWT_SECRET_KEY", "") or "test-only-secret-not-for-production"
     SEED_ON_START = False
     OTP_DEV_MODE = True

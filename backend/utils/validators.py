@@ -122,6 +122,16 @@ def validate_complaint(values: dict) -> dict:
     if department and department not in DEPARTMENT_NAMES:
         errors["department"] = "Unknown department"
 
+    # Computer/Lab maps exclusively to the existing CS lab department.
+    if category == "Computer/Lab":
+        if _text(values, "lab") not in ("BCA Lab", "BIT Lab", "MCA Lab"):
+            errors["lab"] = "Select BCA Lab, BIT Lab, or MCA Lab"
+        system_number = _text(values, "systemNumber")
+        if not system_number:
+            errors["systemNumber"] = "Enter the system number"
+        elif len(system_number) > 50:
+            errors["systemNumber"] = "System number must be 50 characters or fewer"
+
     priority = _text(values, "priority")
     if priority and priority not in PRIORITY_LIST:
         errors["priority"] = "Unknown priority"

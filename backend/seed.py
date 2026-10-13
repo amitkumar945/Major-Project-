@@ -133,15 +133,16 @@ def seed_departments() -> int:
 
 
 def _insert_user(record: dict, role: str, password: str, user_type: str) -> bool:
-    """Insert one account if that email is not already registered."""
-    if users_collection().find_one({"email": record["email"]}):
+    """Insert one account unless its email or ID is already registered."""
+    email = record["email"].lower()
+    if users_collection().find_one({"$or": [{"email": email}, {"id": record["id"]}]}):
         return False
 
     document = {
         **record,
         "role": role,
         "userType": user_type,
-        "email": record["email"].lower(),
+        "email": email,
         "mobile": record.get("mobile", ""),
         "isActive": True,
         "emailVerified": True,

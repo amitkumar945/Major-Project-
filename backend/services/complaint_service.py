@@ -11,6 +11,7 @@ asks for) and writes an audit log.
 """
 
 import logging
+import re
 
 from constants import (
     ACTIVE_STATUSES,
@@ -289,6 +290,14 @@ def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
         "feedback": None,
     }
 
+    # Store the lab location for every Computer/Lab complaint. The classifier
+    # can route based on the issue text, so category-specific metadata must not
+    # disappear when its department prediction differs from the default route.
+    # Missing fields on legacy complaints remain valid and are never rewritten.
+    if category == "Computer/Lab":
+        complaint["lab"] = (payload.get("lab") or "").strip()
+        complaint["systemNumber"] = (payload.get("systemNumber") or "").strip()
+
     # Auto-assign to the least-loaded officer in the department.
     officer = assignment_service.auto_assign(complaint)
     if officer:
@@ -355,8 +364,23 @@ def get_complaints(options: dict, user: dict = None) -> dict:
         query["priority"] = options["priority"]
     if options.get("status"):
         query["status"] = options["status"]
+    elif options.get("statusGroup"):
+        # Dashboard cards group lifecycle statuses in the same way as the
+        # summary counters. Keep the normal Status dropdown exact-match.
+        status_groups = {
+            "pending": ["Submitted", "Under Review", "Pending"],
+            "in-progress": ["In Progress", "Accepted"],
+            "resolved": ["Resolved", "Closed"],
+        }
+        statuses = status_groups.get(str(options["statusGroup"]).strip().lower())
+        if statuses:
+            query["status"] = {"$in": statuses}
     if options.get("category"):
         query["category"] = options["category"]
+    if options.get("lab"):
+        query["lab"] = options["lab"]
+    if options.get("systemNumber"):
+        query["systemNumber"] = {"$regex": re.escape(str(options["systemNumber"])), "$options": "i"}
     if options.get("onlyActive"):
         query["status"] = {"$in": ACTIVE_STATUSES}
 
@@ -372,8 +396,6 @@ def get_complaints(options: dict, user: dict = None) -> dict:
     if search:
         # Regex rather than $text: the frontend searches ids and names too, and
         # escaping keeps user input from being interpreted as a pattern.
-        import re
-
         pattern = re.escape(search)
         matches_search = [
             {"id": {"$regex": pattern, "$options": "i"}},
@@ -381,6 +403,8 @@ def get_complaints(options: dict, user: dict = None) -> dict:
             {"description": {"$regex": pattern, "$options": "i"}},
             {"department": {"$regex": pattern, "$options": "i"}},
             {"category": {"$regex": pattern, "$options": "i"}},
+            {"lab": {"$regex": pattern, "$options": "i"}},
+            {"systemNumber": {"$regex": pattern, "$options": "i"}},
             {"submittedBy.name": {"$regex": pattern, "$options": "i"}},
             {"assignedOfficer.name": {"$regex": pattern, "$options": "i"}},
         ]
@@ -457,6 +481,8 @@ def track(reference_id: str) -> dict:
         "description": complaint["description"],
         "category": complaint.get("category"),
         "department": complaint.get("department"),
+        "lab": complaint.get("lab"),
+        "systemNumber": complaint.get("systemNumber"),
         "priority": complaint.get("priority"),
         "status": complaint.get("status"),
         "submittedAt": complaint.get("submittedAt"),

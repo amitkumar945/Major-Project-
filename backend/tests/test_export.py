@@ -52,6 +52,28 @@ def test_the_header_row_is_present(client, auth, admin_token):
     assert "Status" in rows[0]
 
 
+def test_computer_lab_and_system_are_in_export_without_shifting_existing_columns(
+    client, auth, student_token, admin_token, water_complaint
+):
+    payload = {
+        **water_complaint,
+        "title": "Computer system needs repair",
+        "description": "The affected computer needs repair before the next practical session.",
+        "category": "Computer/Lab",
+        "department": "MCA Lab / Computer Lab",
+        "lab": "BIT Lab",
+        "systemNumber": "System 02",
+    }
+    _submit(client, auth, student_token, payload)
+
+    rows = _rows(client.get("/api/complaints/export", headers=auth(admin_token)))
+    header = rows[0]
+    row = next(row for row in rows[1:] if row[1] == payload["title"])
+    assert row[8] == "student@dsvv.ac.in"
+    assert row[header.index("Lab")] == "BIT Lab"
+    assert row[header.index("System Number")] == "System 02"
+
+
 # ------------------------------------------------------------------ access
 
 
