@@ -60,6 +60,114 @@ frontend separately instead (e.g. `python -m http.server 5500` inside
 On first start the four departments and the demo accounts are created
 automatically. Seeding is idempotent — nothing is duplicated on restart.
 
+### AI grievance assistant and complaint chat
+
+The floating assistant is available on the public, sign-in, and role-based
+portal pages. It answers grounded FAQs and can guide a registered student/staff
+member or a guest through complaint creation. Complaint chat is not a parallel
+creation path: `POST /api/chatbot/message` calls
+`services.chatbot_service.handle_chat_message()`, which submits through
+`services.complaint_service.create_complaint()` and therefore uses the same
+classification, priority, department routing, officer assignment, assignment
+history, notifications, audit logging, and validation as the complaint form.
+Notification failure after creation does not discard the complaint or its
+reference.
+
+#### Endpoint contract
+
+The endpoint accepts an optional JWT. A signed-in user is identified from the
+verified token; guests do not need an account.
+
+```json
+{
+  "message": "Water",
+  "sessionId": "optional-session-id",
+  "action": "optional-action"
+}
+```
+
+`message` is required and limited to 1,200 characters. `sessionId` and `action`
+are returned/used by the client across turns; supported actions include
+`raise_complaint`, `submit`, `edit`, `cancel`, and `new`. The standard success
+envelope contains `data.reply`, `data.sessionId`, `data.step`, optional
+`data.quickReplies`, and, after creation, `data.complaint` with the reference
+and routed department. A newly created complaint returns HTTP 201 with
+`data.created: true` and a reference; an idempotent retry returns HTTP 200
+with the same reference and `data.created: false`.
+
+The state machine collects category, then lab and system number for
+Computer/Lab or a campus location for other categories, a problem description,
+and (for guests) Scholar ID and contact details. Registered Scholar IDs reuse
+the account snapshot. Unregistered IDs create a complaint with a submitter
+snapshot marked `userType: "Guest"` and `isVerified: false`; the account is not
+created. Guest complaints appear in normal department and officer queues and
+are labelled **Unverified guest** in admin/officer details. Public tracking
+masks guest identity as `Guest` and excludes contact details and Scholar ID;
+registered tracking keeps its existing display-name behavior.
+
+Supported chatbot categories are Building, Water, Electricity, Computer/Lab,
+Hostel, Classroom, and Other. Computer/Lab choices are BCA Lab, BIT Lab, and
+MCA Lab. The location suggestions are examples only; any campus landmark or
+room label of 3–200 characters is accepted. Update `constants.py` for complaint
+categories/departments and `services/chatbot_service.py` for slot suggestions
+and fast-path classification mappings/keywords. Urgent keywords belong in
+`ai/priority.py` so the chatbot and normal complaint form share priority rules.
+
+Sessions are stored in MongoDB with unguessable IDs and expire after 30 minutes
+using both application checks and a TTL index. The web widget keeps the active
+ID in tab-scoped `sessionStorage` so a page reload can resume the conversation.
+Submitted sessions are immutable; retries return the existing complaint
+reference and cannot create a second complaint. The complaint collection uses a
+unique sparse `_chatbotSessionId` index for persistence-level idempotency.
+
+#### Limits and OpenAI assistant
+
+The endpoint allows 30 messages per client per 60 seconds by default. Configure
+`RATE_LIMIT_CHATBOT` and `CHATBOT_RATE_WINDOW` to tune that limit. Requests are
+limited to 8 KiB by default (`CHATBOT_MAX_REQUEST_BYTES`), and message text is
+limited to 1,200 characters.
+Guest complaint submissions additionally use the following environment
+settings (defaults shown):
+
+| Setting | Default | Meaning |
+|---|---:|---|
+| `CHATBOT_GUEST_RATE_WINDOW` | 300 | Guest submission window in seconds |
+| `CHATBOT_GUEST_IP_LIMIT` | 15 | Guest submissions per client IP per window |
+| `CHATBOT_GUEST_MOBILE_LIMIT` | 5 | Guest submissions per normalized mobile per window |
+
+The limits use an in-process fixed-window counter, so they are per process and
+reset on restart. Multi-worker or multi-instance deployments need a shared
+rate-limit store (for example Redis) to enforce a global quota; Redis is not
+currently part of this deployment. Client identity uses the WSGI peer address.
+Forwarded headers are ignored unless `TRUSTED_PROXY_COUNT` is set to the number
+of trusted proxies and the final trusted proxy overwrites `X-Forwarded-For`.
+The Vercel adapter trusts one Vercel hop by default; Vercel documents that it
+overwrites this header with the public requester IP. On other hosts, only
+configure trusted proxies when the app cannot be reached directly around them.
+
+The assistant uses the official OpenAI Python SDK and the Chat Completions API.
+It defaults to `gpt-4o-mini`; conversation history is limited to recent FAQ
+turns and redacted before storage and transmission. Complaint filing and
+authenticated status lookup remain backend-controlled and are not delegated to
+the model. API failures use a clearly labelled local FAQ response.
+
+```dotenv
+OPENAI_API_KEY=your-provider-key
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_TIMEOUT=12
+```
+
+Set the key in `backend/.env` locally (never commit that file) or in the
+deployment platform's encrypted environment/secret settings. Do not put it in
+frontend files. `CHATBOT_AI_API_KEY`, `CHATBOT_AI_MODEL`,
+`CHATBOT_AI_BASE_URL`, and `CHATBOT_AI_TIMEOUT` remain supported as legacy
+aliases. If no key is configured or OpenAI returns an error (including invalid
+key, exhausted quota, provider rate limit, or timeout), the endpoint returns
+the existing local FAQ with a `source: "local_faq"` marker and an explanatory
+notice; successful model answers are marked `source: "ai"`. The API key and
+provider exception details are never included in responses.
+
 ### Demo accounts
 
 | Role | Email | Password |
