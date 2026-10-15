@@ -23,9 +23,8 @@ _CLEANUP_THRESHOLD = 1000
 
 
 def _client_key() -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # ProxyFix, when explicitly enabled, has already selected a trusted hop.
+    # Never consume X-Forwarded-For directly from an arbitrary client.
     return request.remote_addr or "unknown"
 
 
@@ -35,9 +34,9 @@ def _cleanup(now: float, window: int) -> None:
         _HITS.pop(key, None)
 
 
-def check(bucket: str, limit: int, window: int) -> tuple:
+def check(bucket: str, limit: int, window: int, client_key: str = None) -> tuple:
     """Register a hit. Returns (allowed, seconds_until_reset)."""
-    key = (bucket, _client_key())
+    key = (bucket, client_key or _client_key())
     now = time.time()
 
     with _LOCK:
@@ -69,11 +68,18 @@ def rate_limit(bucket: str = "default", limit: int = None, window: int = None):
             if not current_app.config.get("RATE_LIMIT_ENABLED", True):
                 return fn(*args, **kwargs)
 
-            effective_window = window or current_app.config.get("RATE_LIMIT_WINDOW", 60)
+            if window is not None:
+                effective_window = window
+            elif bucket == "chatbot":
+                effective_window = current_app.config.get("CHATBOT_RATE_WINDOW", 60)
+            else:
+                effective_window = current_app.config.get("RATE_LIMIT_WINDOW", 60)
             if limit is not None:
                 effective_limit = limit
             elif bucket == "otp":
                 effective_limit = current_app.config.get("RATE_LIMIT_OTP", 5)
+            elif bucket == "chatbot":
+                effective_limit = current_app.config.get("RATE_LIMIT_CHATBOT", 30)
             else:
                 effective_limit = current_app.config.get("RATE_LIMIT_AUTH", 10)
 

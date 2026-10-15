@@ -115,8 +115,10 @@ def _initial_timeline(complaint: dict) -> list:
     now = iso(utcnow())
     officer_name = (complaint.get("assignedOfficer") or {}).get("name")
 
+    submitter_name = (complaint.get("submittedBy") or {}).get("name") or "Complainant"
+
     actors = {
-        "submitted": complaint["submittedBy"]["name"],
+        "submitted": submitter_name,
         "classified": "AI Classification Engine",
         "department": "Grievance Redressal Cell",
         "officer": officer_name or "Department Head",
@@ -220,8 +222,17 @@ def can_view(complaint: dict, user: dict) -> bool:
 # --------------------------------------------------------------- creation
 
 
-def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
+def create_complaint(
+    payload: dict,
+    user: dict = None,
+    evidence: list = None,
+    idempotency_key: str = None,
+) -> dict:
     """Register a complaint: classify it, set the deadline, auto-assign, notify."""
+    user = user or {}
+    submitter_input = payload.get("submitter")
+    if not isinstance(submitter_input, dict):
+        submitter_input = {}
     title = (payload.get("title") or "").strip()
     description = (payload.get("description") or "").strip()
     category = (payload.get("category") or "").strip()
@@ -244,7 +255,7 @@ def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
         # the failure is logged for the operator.
         logger.exception(
             "AI analysis failed for a complaint by %s; storing it with fallback routing.",
-            user.get("id", "unknown"),
+            user.get("id", "guest"),
         )
         analysis = None
 
@@ -258,6 +269,64 @@ def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
     submitted_at = iso(utcnow())
     reference = complaint_reference(next_sequence(f"complaint_{utcnow().year}"))
 
+    is_guest = not user.get("id") or user.get("isGuest") or user.get("type") == "guest"
+
+    if is_guest:
+        submitter_name = (
+            user.get("name")
+            or payload.get("name")
+            or submitter_input.get("name")
+            or "Guest"
+        ).strip()
+        scholar_id = (
+            user.get("userId")
+            or user.get("scholarId")
+            or payload.get("scholarId")
+            or payload.get("userId")
+            or submitter_input.get("scholarId")
+            or submitter_input.get("userId")
+            or ""
+        ).strip()
+        email = (
+            user.get("email")
+            or payload.get("email")
+            or submitter_input.get("email")
+            or ""
+        ).strip()
+        mobile = (
+            user.get("mobile")
+            or payload.get("mobile")
+            or submitter_input.get("mobile")
+            or ""
+        ).strip()
+
+        submitted_by = {
+            "type": "guest",
+            "id": None,
+            "name": submitter_name,
+            "userId": scholar_id,
+            "scholarId": scholar_id,
+            "email": email,
+            "mobile": mobile,
+            "userType": "Guest",
+            "hostel": "—",
+            "isVerified": False,
+        }
+    else:
+        scholar_id = (user.get("userId") or user.get("scholarId") or "").strip()
+        submitted_by = {
+            "type": "registered",
+            "id": user["id"],
+            "name": user.get("name", ""),
+            "userId": scholar_id,
+            "scholarId": scholar_id,
+            "email": user.get("email", ""),
+            "mobile": user.get("mobile", ""),
+            "userType": user.get("userType", "Student"),
+            "hostel": user.get("hostel", "—"),
+            "isVerified": True,
+        }
+
     complaint = {
         "id": reference,
         "title": title,
@@ -266,14 +335,7 @@ def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
         "department": department,
         "priority": priority,
         "status": STATUS_SUBMITTED,
-        "submittedBy": {
-            "id": user["id"],
-            "name": user.get("name", ""),
-            "userId": user.get("userId", ""),
-            "email": user.get("email", ""),
-            "userType": user.get("userType", "Student"),
-            "hostel": user.get("hostel", "—"),
-        },
+        "submittedBy": submitted_by,
         "assignedOfficer": None,
         "location": _normalise_location(payload.get("location")),
         "evidence": evidence or [],
@@ -289,6 +351,8 @@ def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
         "resolution": None,
         "feedback": None,
     }
+    if idempotency_key:
+        complaint["_chatbotSessionId"] = idempotency_key
 
     # Store the lab location for every Computer/Lab complaint. The classifier
     # can route based on the issue text, so category-specific metadata must not
@@ -308,16 +372,29 @@ def create_complaint(payload: dict, user: dict, evidence: list = None) -> dict:
 
     complaints().insert_one(complaint)
     stored = clean_document(complaint)
+    stored.pop("_chatbotSessionId", None)
 
     if officer:
-        assignment_service.record_assignment(reference, officer, actor=user, reason="Automatic assignment on submission.")
+        try:
+            assignment_service.record_assignment(reference, officer, actor=user, reason="Automatic assignment on submission.")
+        except Exception:
+            logger.exception("Failed to record assignment history for %s", reference)
 
-    notification_service.complaint_submitted(stored)
-    audit_service.log(
-        audit_service.COMPLAINT_CREATED, user,
-        f"Complaint {reference} registered for {department} ({priority} priority).",
-        complaint_id=reference,
-    )
+    try:
+        notification_service.complaint_submitted(stored)
+    except Exception:
+        logger.exception("Failed to send complaint submission notifications for %s", reference)
+
+    try:
+        audit_user = user if user.get("id") else None
+        audit_service.log(
+            audit_service.COMPLAINT_CREATED, audit_user,
+            f"Complaint {reference} registered for {department} ({priority} priority).",
+            complaint_id=reference,
+        )
+    except Exception:
+        logger.exception("Failed to write audit log for %s", reference)
+
     return _decorate(stored)
 
 
@@ -475,6 +552,36 @@ def track(reference_id: str) -> dict:
         )
 
     complaint = _decorate(clean_document(complaint))
+    location = complaint.get("location") or {}
+    submitter = complaint.get("submittedBy") or {}
+    guest = (
+        submitter.get("type") == "guest"
+        or submitter.get("userType") == "Guest"
+        or submitter.get("isVerified") is False
+    )
+    timeline = complaint.get("timeline") or []
+    if guest:
+        submitter_name = submitter.get("name")
+        timeline = [
+            {
+                **entry,
+                "actor": "Guest",
+            } if entry.get("actor") == submitter_name else entry
+            for entry in timeline
+        ]
+    tracked_location = (
+        {
+            "latitude": location.get("latitude"),
+            "longitude": location.get("longitude"),
+            "address": location.get("address", ""),
+            "block": location.get("block", ""),
+        }
+        if any(
+            location.get(key) not in (None, "")
+            for key in ("latitude", "longitude", "address", "block")
+        )
+        else {}
+    )
     return {
         "id": complaint["id"],
         "title": complaint["title"],
@@ -491,9 +598,9 @@ def track(reference_id: str) -> dict:
         "resolvedAt": complaint.get("resolvedAt"),
         "daysOverdue": complaint.get("daysOverdue", 0),
         "escalationLevel": complaint.get("escalationLevel", 0),
-        "timeline": complaint.get("timeline", []),
-        # Only the complainant's display name, never their email or hostel.
-        "submittedBy": {"name": (complaint.get("submittedBy") or {}).get("name", "")},
+        "timeline": timeline,
+        # Keep guest identity and contact details out of the unauthenticated view.
+        "submittedBy": {"name": "Guest" if guest else submitter.get("name", "")},
         "assignedOfficer": (
             {
                 "name": complaint["assignedOfficer"].get("name", ""),
@@ -515,16 +622,7 @@ def track(reference_id: str) -> dict:
         # Where the issue is, so the public tracker can show it on the map.
         # The GPS accuracy radius is withheld: it describes the reporter's
         # device rather than the complaint, and this view is unauthenticated.
-        "location": (
-            {
-                "latitude": (complaint.get("location") or {}).get("latitude"),
-                "longitude": (complaint.get("location") or {}).get("longitude"),
-                "address": (complaint.get("location") or {}).get("address", ""),
-                "block": (complaint.get("location") or {}).get("block", ""),
-            }
-            if (complaint.get("location") or {}).get("latitude") is not None
-            else {}
-        ),
+        "location": tracked_location,
     }
 
 
@@ -621,10 +719,12 @@ def add_remark(complaint_id: str, message: str, actor: dict) -> dict:
 
     # Tell the other party there is a new remark.
     if actor.get("role") in (ROLE_OFFICER, ROLE_ADMIN):
-        notification_service.create(
-            result["submittedBy"]["id"], "status_changed", "New remark on your complaint",
-            f"{actor.get('name')} commented on {complaint_id}.", complaint_id,
-        )
+        submitter_id = (result.get("submittedBy") or {}).get("id")
+        if submitter_id:
+            notification_service.create(
+                submitter_id, "status_changed", "New remark on your complaint",
+                f"{actor.get('name')} commented on {complaint_id}.", complaint_id,
+            )
     elif result.get("assignedOfficer"):
         notification_service.create(
             result["assignedOfficer"]["id"], "status_changed", "New remark from the complainant",

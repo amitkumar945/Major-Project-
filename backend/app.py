@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import get_config
 from database import init_db
@@ -34,6 +35,12 @@ def create_app(config_object=None) -> Flask:
 
     app = Flask(__name__, static_folder=None)
     app.config.from_object(config_object)
+
+    trusted_proxy_count = app.config.get("TRUSTED_PROXY_COUNT", 0)
+    if trusted_proxy_count < 0:
+        raise ValueError("TRUSTED_PROXY_COUNT cannot be negative.")
+    if trusted_proxy_count:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=trusted_proxy_count)
 
     # ------------------------------------------------------- secret checks
     # Refuse to start without a signing key rather than falling back to a
@@ -125,6 +132,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.analytics_routes import bp as analytics_bp
     from routes.auth_routes import bp as auth_bp
     from routes.complaint_routes import bp as complaint_bp
+    from routes.chatbot_routes import bp as chatbot_bp
     from routes.department_routes import bp as department_bp
     from routes.device_routes import bp as device_bp
     from routes.feedback_routes import bp as feedback_bp
@@ -134,7 +142,7 @@ def _register_blueprints(app: Flask) -> None:
     from routes.user_routes import bp as user_bp
 
     for blueprint in (
-        auth_bp, complaint_bp, ai_bp, officer_bp, department_bp,
+        auth_bp, complaint_bp, chatbot_bp, ai_bp, officer_bp, department_bp,
         user_bp, notification_bp, feedback_bp, analytics_bp, admin_bp, file_bp,
         device_bp,
     ):

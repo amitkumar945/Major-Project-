@@ -823,3 +823,177 @@ def test_uploaded_file_requires_authentication_to_download(client, auth, student
     download = client.get(url, headers=auth(student_token))
     assert download.status_code == 200
     assert download.headers["Content-Disposition"].startswith("attachment;")
+
+
+# ---------------------------------------------------- guest & snapshot tests
+
+
+def test_registered_complaint_has_complete_submitter_snapshot(app, client, make_complaint):
+    complaint = make_complaint()
+    submitter = complaint["submittedBy"]
+
+    assert submitter["type"] == "registered"
+    assert submitter["isVerified"] is True
+    assert submitter["id"] == "USR-1001"
+    assert submitter["name"] == "Rakesh Patidar"
+    assert submitter["email"] == "student@dsvv.ac.in"
+    assert submitter["userId"] == "MCA/2024/018"
+    assert submitter["scholarId"] == "MCA/2024/018"
+
+
+def test_registered_service_creation_uses_account_snapshot(app):
+    from database import users
+    from services import complaint_service
+
+    account = users().find_one({"id": "USR-1001"}, {"_id": 0, "passwordHash": 0})
+    payload = {
+        "title": "Water cooler leaking near library gate",
+        "description": "Continuous water leakage near the central library water cooler for the past three hours.",
+        "category": "Water",
+        "submitter": {
+            "type": "guest",
+            "name": "Forged Name",
+            "scholarId": "FORGED/2026/001",
+            "email": "forged@example.com",
+            "mobile": "9876543210",
+        },
+    }
+
+    complaint = complaint_service.create_complaint(payload, user=account)
+
+    submitter = complaint["submittedBy"]
+    assert submitter["type"] == "registered"
+    assert submitter["isVerified"] is True
+    assert submitter["id"] == account["id"]
+    assert submitter["name"] == account["name"]
+    assert submitter["scholarId"] == account["userId"]
+    assert submitter["email"] == account["email"]
+    assert submitter["mobile"] == account["mobile"]
+
+
+def test_guest_complaint_creation_does_not_create_account(app):
+    from database import users
+    from services import complaint_service
+
+    initial_user_count = users().count_documents({})
+
+    payload = {
+        "title": "Water cooler leaking near library gate",
+        "description": "Continuous water leakage near the central library water cooler for the past three hours.",
+        "category": "Water",
+        "location": {"latitude": 29.99965, "longitude": 78.1946, "address": "Central Library Gate"},
+        "submitter": {
+            "name": "Arjun Sharma",
+            "scholarId": "GUEST/2026/999",
+            "email": "arjun.guest@example.com",
+            "mobile": "9876543210",
+        },
+    }
+
+    complaint = complaint_service.create_complaint(payload, user=None)
+
+    assert complaint["id"].startswith("DSVV-GRV-")
+    assert complaint["status"] in ("Submitted", "Assigned")
+    assert users().count_documents({}) == initial_user_count
+
+    submitter = complaint["submittedBy"]
+    assert submitter["type"] == "guest"
+    assert submitter["id"] is None
+    assert submitter["isVerified"] is False
+    assert submitter["name"] == "Arjun Sharma"
+    assert submitter["email"] == "arjun.guest@example.com"
+    assert submitter["mobile"] == "9876543210"
+    assert submitter["scholarId"] == "GUEST/2026/999"
+
+
+def test_malformed_submitter_snapshot_does_not_crash_guest_creation(app):
+    from services import complaint_service
+
+    payload = {
+        "title": "Broken window in hostel corridor",
+        "description": "The window glass in the corridor is completely shattered and dangerous.",
+        "category": "Building",
+        "submitter": ["unexpected", "shape"],
+    }
+
+    complaint = complaint_service.create_complaint(payload, user=None)
+
+    assert complaint["submittedBy"]["type"] == "guest"
+    assert complaint["submittedBy"]["id"] is None
+    assert complaint["submittedBy"]["isVerified"] is False
+
+
+def test_guest_personal_details_never_leak_in_public_tracking(app):
+    from services import complaint_service
+
+    payload = {
+        "title": "Broken window in hostel corridor",
+        "description": "The window glass in the corridor is completely shattered and dangerous.",
+        "category": "Building",
+        "location": {"latitude": 29.99965, "longitude": 78.1946, "address": "Gayatri Bhavan Corridor"},
+        "submitter": {
+            "name": "Guest Visitor",
+            "scholarId": "SCH-GUEST-001",
+            "email": "private.guest@example.com",
+            "mobile": "9876543210",
+        },
+    }
+
+    complaint = complaint_service.create_complaint(payload, user=None)
+    tracked = complaint_service.track(complaint["id"])
+
+    assert tracked["submittedBy"]["name"] == "Guest"
+    assert "Guest Visitor" not in str(tracked)
+    assert "email" not in tracked["submittedBy"]
+    assert "mobile" not in tracked["submittedBy"]
+    assert "userId" not in tracked["submittedBy"]
+    assert "scholarId" not in tracked["submittedBy"]
+    assert "id" not in tracked["submittedBy"]
+
+
+def test_computer_lab_fields_preserved_when_routed_elsewhere(app):
+    from services import complaint_service
+
+    payload = {
+        "title": "Severe water leakage above computer lab ceiling",
+        "description": "Continuous water dripping directly from the ceiling onto computer workstations in BCA Lab.",
+        "category": "Computer/Lab",
+        "lab": "BCA Lab",
+        "systemNumber": "System 12",
+        "location": {"latitude": 29.99965, "longitude": 78.1946, "address": "BCA Lab Room 101"},
+    }
+
+    user = {
+        "id": "USR-1001",
+        "name": "Rakesh Patidar",
+        "userId": "MCA/2024/018",
+        "email": "student@dsvv.ac.in",
+        "role": "student",
+    }
+    complaint = complaint_service.create_complaint(payload, user=user)
+
+    # Classification keyword "water" routes it to Jal Kal Vibhag
+    assert complaint["department"] == "Jal Kal Vibhag"
+    # But Computer/Lab metadata must remain preserved
+    assert complaint["lab"] == "BCA Lab"
+    assert complaint["systemNumber"] == "System 12"
+
+
+def test_assignment_history_failure_does_not_abort_complaint_creation(app, monkeypatch):
+    from services import assignment_service, complaint_service
+
+    def fail_record(*args, **kwargs):
+        raise RuntimeError("Database connection glitch while recording assignment")
+
+    monkeypatch.setattr(assignment_service, "record_assignment", fail_record)
+
+    payload = {
+        "title": "Water leakage in canteen washroom",
+        "description": "Water tap is broken and water is flowing all over the floor in the canteen washroom.",
+        "category": "Water",
+        "location": {"latitude": 29.99965, "longitude": 78.1946, "address": "Canteen washroom"},
+    }
+
+    complaint = complaint_service.create_complaint(payload, user=None)
+    assert complaint["id"].startswith("DSVV-GRV-")
+    assert complaint_service.track(complaint["id"])["id"] == complaint["id"]
