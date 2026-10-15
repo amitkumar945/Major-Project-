@@ -134,7 +134,7 @@ function detailsView() {
     ROLE !== ROLES.STUDENT
       ? infoRow(
           'Raised by',
-          `${esc(complaint.submittedBy?.name)} <span class="cell-sub">${esc(complaint.submittedBy?.userId ?? '')}</span>`,
+          `${esc(complaint.submittedBy?.name)} <span class="cell-sub">${esc(complaint.submittedBy?.userId ?? '')}</span>${['Guest', 'guest'].includes(complaint.submittedBy?.userType ?? complaint.submittedBy?.type) || complaint.submittedBy?.isVerified === false ? ' <span class="badge badge--pending">Unverified guest</span>' : ''}`,
         )
       : '',
     ROLE !== ROLES.STUDENT

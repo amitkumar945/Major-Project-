@@ -17,6 +17,7 @@ import { MENUS, TABS } from './navigation.js'
 import { roleLabel, signOut } from './session.js'
 import { getUnreadCount } from '../services/notificationService.js'
 import { APP_NAME, ASSETS, UNIVERSITY_SHORT } from '../utils/constants.js'
+import { mountChatbot } from './chatbot.js'
 
 /* ------------------------------------------------------------- sidebar --- */
 
@@ -201,6 +202,7 @@ export function renderShell(user, { title }) {
   wireAccountMenu()
   wireLogout()
   refreshUnreadBadge(user)
+  mountChatbot()
 }
 
 /* The sidebar is a drawer below 1200px and a fixed column above it. */

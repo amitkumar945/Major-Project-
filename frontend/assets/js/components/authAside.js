@@ -5,6 +5,7 @@
 
 import { icon } from './dom.js'
 import { logo } from './publicChrome.js'
+import { mountChatbot } from './chatbot.js'
 
 const POINTS = [
   'Register a grievance in under two minutes with photo and location evidence',
@@ -14,6 +15,7 @@ const POINTS = [
 ]
 
 export function authAside() {
+  mountChatbot()
   return `
     ${logo({ light: true })}
 

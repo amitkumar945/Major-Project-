@@ -135,8 +135,9 @@ function unwrap(payload) {
  * @param {string} [options.method]  GET | POST | PUT | PATCH | DELETE
  * @param {object} [options.body]    JSON body
  * @param {object} [options.query]   query-string parameters
+ * @param {boolean} [options.includeStatus] Return `{ data, status }` instead of only data
  */
-export async function request(path, { method = 'GET', body, query } = {}) {
+export async function request(path, { method = 'GET', body, query, includeStatus = false } = {}) {
   const url = new URL(API_BASE_URL + path, location.origin)
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
@@ -177,7 +178,8 @@ export async function request(path, { method = 'GET', body, query } = {}) {
     )
   }
 
-  return unwrap(payload)
+  const data = unwrap(payload)
+  return includeStatus ? { data, status: response.status } : data
 }
 
 /**
