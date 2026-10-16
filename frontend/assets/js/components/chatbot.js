@@ -195,12 +195,23 @@ export function mountChatbot() {
 
   function actionForReply(reply) {
     const normalized = reply.trim().toLowerCase()
-    if (normalized === 'submit') return 'submit'
-    if (normalized === 'cancel') return 'cancel'
-    if (normalized === 'edit') return 'edit'
-    if (normalized === 'raise another complaint') return 'new'
-    if (normalized === 'raise a complaint') return 'raise_complaint'
+    if (normalized === 'submit' || normalized === 'दर्ज करें') return 'submit'
+    if (normalized === 'cancel' || normalized === 'रद्द करें') return 'cancel'
+    if (normalized === 'edit' || normalized === 'बदलें' || normalized === 'विवरण बदलें') return 'edit'
+    if (normalized === 'back' || normalized === 'पीछे') return 'back'
+    if (normalized === 'continue' || normalized === 'जारी रखें') return 'continue'
+    if (normalized === 'start new' || normalized === 'नई शुरू करें') return 'new'
+    if (normalized === 'raise another complaint' || normalized === 'दूसरी शिकायत दर्ज करें') return 'new'
+    if (normalized === 'raise a complaint' || normalized === 'शिकायत दर्ज करें' || normalized === 'नई शिकायत दर्ज') return 'raise_complaint'
     return ''
+  }
+
+  function disableExistingReplies() {
+    host.querySelectorAll('.dsvv-chat__quick-replies button, .dsvv-chat__suggestions button')
+      .forEach((button) => {
+        button.disabled = true
+        button.classList.add('is-disabled')
+      })
   }
 
   function addQuickReplies(replies, className = 'dsvv-chat__quick-replies') {
@@ -213,7 +224,10 @@ export function mountChatbot() {
       const button = document.createElement('button')
       button.type = 'button'
       button.textContent = reply
-      button.addEventListener('click', () => send(reply, actionForReply(reply)))
+      button.addEventListener('click', () => {
+        disableExistingReplies()
+        send(reply, actionForReply(reply))
+      })
       group.append(button)
     })
     if (group.childElementCount) messages.append(group)
@@ -294,6 +308,7 @@ export function mountChatbot() {
   async function send(text, action = '', showUser = true) {
     const question = text.trim()
     if (!question || busy) return
+    disableExistingReplies()
     if (showUser) addMessage(question, 'user')
     setBusy(true)
 
@@ -308,6 +323,9 @@ export function mountChatbot() {
         throw new Error('The assistant returned an incomplete response. Please retry.')
       }
       rememberSession(data.sessionId)
+      if (data.step && data.step !== 'idle') {
+        host.querySelectorAll('.dsvv-chat__suggestions').forEach((el) => el.remove())
+      }
       if (data.step === 'done') {
         const reference = data.complaint?.reference || data.complaint?.id
         if (!reference || (data.created ? status !== 201 : status !== 200)) {

@@ -359,11 +359,23 @@ def test_voice_transcript_complaint_flow_requires_spoken_confirmation(
     _chat_step(
         client, "Gayatri Bhavan hostel entrance", session_id=session_id, token=student_token
     )
-    summary = _chat_step(
+    desc_step = _chat_step(
         client,
         "Water has been leaking from the pipe near the hostel entrance for two days.",
         session_id=session_id,
         token=student_token,
+    )
+    assert desc_step["step"] == "scholarId"
+    id_step = _chat_step(
+        client, "USR-1001", session_id=session_id, token=student_token
+    )
+    assert id_step["step"] == "mobile"
+    mob_step = _chat_step(
+        client, "9876543210", session_id=session_id, token=student_token
+    )
+    assert mob_step["step"] == "confirm_identity"
+    summary = _chat_step(
+        client, confirmation, session_id=session_id, token=student_token
     )
     assert summary["step"] == "confirm"
     assert complaints().find_one({"_chatbotSessionId": session_id}) is None
@@ -606,16 +618,27 @@ def test_registered_user_complaint_flow(client, auth, student_token, admin_token
     # 5. Description: >= 25 chars
     desc = "The monitor display has heavy green flickering and powers off intermittently during lab practicals."
     step5 = _chat_step(client, desc, session_id=session_id, token=student_token)
-    # Scholar ID skipped because student is logged in!
-    assert step5["step"] == "confirm"
-    assert "Submit" in step5["quickReplies"]
+    assert step5["step"] == "scholarId"
 
-    # 6. Submit
-    step6 = _chat_step(client, "Submit", session_id=session_id, token=student_token, action="submit")
-    assert step6["step"] == "done"
-    ref = step6["complaint"]["id"]
+    # 6. Scholar ID (matches student account)
+    step6 = _chat_step(client, "USR-1001", session_id=session_id, token=student_token)
+    assert step6["step"] == "mobile"
+
+    # 7. Mobile (account has no mobile registered)
+    step7 = _chat_step(client, "9876543210", session_id=session_id, token=student_token)
+    assert step7["step"] == "confirm_identity"
+
+    # 8. Confirm identity details
+    step8 = _chat_step(client, "Yes, details are correct", session_id=session_id, token=student_token)
+    assert step8["step"] == "confirm"
+    assert "Submit" in step8["quickReplies"]
+
+    # 9. Submit
+    step9 = _chat_step(client, "Submit", session_id=session_id, token=student_token, action="submit")
+    assert step9["step"] == "done"
+    ref = step9["complaint"]["id"]
     assert ref.startswith("DSVV-GRV-")
-    assert step6["complaint"]["department"] == "MCA Lab / Computer Lab"
+    assert step9["complaint"]["department"] == "MCA Lab / Computer Lab"
 
     # Verify complaint in database
     from database import complaints
@@ -648,6 +671,9 @@ def test_computer_lab_metadata_survives_department_rerouting(client, student_tok
         session_id=session_id,
         token=student_token,
     )
+    _chat_step(client, "USR-1001", session_id=session_id, token=student_token)
+    _chat_step(client, "9876543210", session_id=session_id, token=student_token)
+    _chat_step(client, "Yes, details are correct", session_id=session_id, token=student_token)
     created = _chat_step(
         client, "Submit", session_id=session_id, token=student_token,
         action="submit", expected_status=201,
@@ -717,16 +743,33 @@ def test_guest_user_complaint_flow(client):
     assert track_data["location"]["address"] == "Gayatri Bhavan, Hostel Zone A"
 
 
-def test_guest_with_registered_scholar_id_skips_contact_questions(client):
+def test_guest_with_registered_scholar_id_still_asks_contact_details(client):
     step1 = _chat_step(client, "Raise a complaint")
     session_id = step1["sessionId"]
     _chat_step(client, "Electricity", session_id=session_id)
     _chat_step(client, "Academic Block C, Second Floor", session_id=session_id)
     _chat_step(client, "Ceiling fan regulator sparking and not turning off in classroom 204.", session_id=session_id)
 
-    # Provide registered Scholar ID for Rakesh Patidar ("MCA/2024/018")
+    # Provide registered Scholar ID for Rakesh Patidar ("MCA/2024/018") as guest
     step = _chat_step(client, "MCA/2024/018", session_id=session_id)
-    # Directly moves to confirm, skipping name/mobile/email!
+    # With CHATBOT_ASK_IDENTITY=True, does NOT auto-fill student data: asks name, mobile, email
+    assert step["step"] == "name"
+    step_mob = _chat_step(client, "Guest Student", session_id=session_id)
+    assert step_mob["step"] == "mobile"
+    step_email = _chat_step(client, "9876543210", session_id=session_id)
+    assert step_email["step"] == "email"
+    step_conf = _chat_step(client, "guest@example.com", session_id=session_id)
+    assert step_conf["step"] == "confirm"
+
+
+def test_legacy_autofill_when_ask_identity_false(client, app, monkeypatch):
+    monkeypatch.setitem(app.config, "CHATBOT_ASK_IDENTITY", False)
+    step1 = _chat_step(client, "Raise a complaint")
+    session_id = step1["sessionId"]
+    _chat_step(client, "Electricity", session_id=session_id)
+    _chat_step(client, "Academic Block C, Second Floor", session_id=session_id)
+    _chat_step(client, "Ceiling fan regulator sparking and not turning off in classroom 204.", session_id=session_id)
+    step = _chat_step(client, "MCA/2024/018", session_id=session_id)
     assert step["step"] == "confirm"
     assert "Rakesh Patidar" in step["reply"]
 
@@ -776,7 +819,7 @@ def test_fast_path_low_confidence_offers_categories(client, monkeypatch):
     result = _chat_step(client, "My unusual issue affects several campus rooms.")
 
     assert result["step"] == "category"
-    assert result["quickReplies"] == chatbot_service.ALLOWED_CATEGORIES
+    assert all(cat in result["quickReplies"] for cat in chatbot_service.ALLOWED_CATEGORIES)
     assert result["draft"]["description"] == "My unusual issue affects several campus rooms."
 
 
@@ -841,6 +884,9 @@ def test_edit_and_cancel_in_state_machine(client):
     _chat_step(client, "Central Library", session_id=session_id)
     _chat_step(client, "Cracked plaster on the west corridor wall needs inspection and repair.", session_id=session_id)
     _chat_step(client, "MCA/2024/018", session_id=session_id)
+    _chat_step(client, "Guest Reporter", session_id=session_id)
+    _chat_step(client, "9876543210", session_id=session_id)
+    _chat_step(client, "guest@example.com", session_id=session_id)
 
     # Edit description
     edit_step = _chat_step(client, "Edit", session_id=session_id, action="edit")
@@ -972,6 +1018,9 @@ def test_idempotent_submit_returns_same_reference(client):
     _chat_step(client, "Central Library, Ground Floor", session_id=session_id)
     _chat_step(client, "Corridor light switch is loose and sparking when touched.", session_id=session_id)
     _chat_step(client, "MCA/2024/018", session_id=session_id)
+    _chat_step(client, "Guest Reporter", session_id=session_id)
+    _chat_step(client, "9876543210", session_id=session_id)
+    _chat_step(client, "guest@example.com", session_id=session_id)
 
     # Submit 1
     sub1 = _chat_step(client, "Submit", session_id=session_id, action="submit", expected_status=201)
@@ -1082,6 +1131,9 @@ def test_failed_complaint_creation_keeps_draft_for_retry(client, student_token, 
         session_id=session_id,
         token=student_token,
     )
+    _chat_step(client, "USR-1001", session_id=session_id, token=student_token)
+    _chat_step(client, "9876543210", session_id=session_id, token=student_token)
+    _chat_step(client, "Yes, details are correct", session_id=session_id, token=student_token)
     assert chatbot_sessions().find_one({"sessionId": session_id})["step"] == "confirm"
 
     create_complaint = complaint_service.create_complaint
@@ -1137,3 +1189,290 @@ def test_admin_notification_failure_does_not_hide_created_reference(client, monk
 
     assert created["step"] == "done"
     assert created["complaint"]["reference"].startswith("DSVV-GRV-")
+
+
+# ------------------------------------------------ Systematic Flow & Edge Case Tests
+
+
+def test_tap_raise_complaint_starts_with_category_not_mobile(client):
+    """Bug fix verification: 'Raise a complaint' starts at Category, never Mobile."""
+    res = _chat_step(client, "Raise a complaint")
+    assert res["step"] == "category"
+    assert "mobile" not in res["reply"].lower()
+    assert "category" in res["reply"].lower() or "श्रेणी" in res["reply"]
+    assert any("Water" in qr or "Electricity" in qr for qr in res["quickReplies"])
+    assert "Cancel" in res["quickReplies"] or "रद्द करें" in res["quickReplies"]
+
+
+def test_systematic_registered_user_flow_with_step_counters(client, auth, student_token):
+    """Full registered flow: Category -> Location -> Description -> Scholar ID -> Confirm Identity -> Confirm -> Submit."""
+    # 1. Category
+    s1 = _chat_step(client, "Raise a complaint", token=student_token)
+    assert s1["step"] == "category"
+    assert "[Step 1 of " in s1["reply"]
+
+    # 2. Location
+    s2 = _chat_step(client, "Electricity", session_id=s1["sessionId"], token=student_token)
+    assert s2["step"] == "location"
+    assert "[Step 2 of " in s2["reply"]
+
+    # 3. Description
+    s3 = _chat_step(client, "Central Library, Ground Floor", session_id=s1["sessionId"], token=student_token)
+    assert s3["step"] == "description"
+    assert "[Step 3 of " in s3["reply"]
+
+    # 4. Scholar ID
+    s4 = _chat_step(
+        client,
+        "Corridor light is flickering rapidly and making a buzzing noise.",
+        session_id=s1["sessionId"],
+        token=student_token,
+    )
+    assert s4["step"] == "scholarId"
+    assert "[Step 4 of " in s4["reply"]
+
+    # 5. Scholar ID
+    s5 = _chat_step(client, "USR-1001", session_id=s1["sessionId"], token=student_token)
+    assert s5["step"] == "mobile"
+    assert "[Step 5 of " in s5["reply"]
+
+    # 6. Mobile (since student account has no mobile)
+    s6 = _chat_step(client, "9876543210", session_id=s1["sessionId"], token=student_token)
+    assert s6["step"] == "confirm_identity"
+    assert "[Step 6 of " in s6["reply"]
+    assert "Are these details correct?" in s6["reply"]
+    assert "Yes, details are correct" in s6["quickReplies"]
+    assert "Change details" in s6["quickReplies"]
+
+    # 7. Confirm Summary
+    s7 = _chat_step(client, "Yes, details are correct", session_id=s1["sessionId"], token=student_token)
+    assert s7["step"] == "confirm"
+    assert "Submit" in s7["quickReplies"]
+    assert "Edit" in s7["quickReplies"]
+    assert "Cancel" in s7["quickReplies"]
+    assert ("MCA/2024/018" in s7["reply"] or "USR-1001" in s7["reply"])
+    assert "9876543210" in s7["reply"]
+
+    # 8. Submit
+    s8 = _chat_step(client, "Submit", session_id=s1["sessionId"], token=student_token, action="submit", expected_status=201)
+    assert s8["step"] == "done"
+    assert s8["complaint"]["id"].startswith("DSVV-GRV-")
+
+
+def test_registered_user_scholar_id_mismatch_rejected(client, student_token):
+    """If typed Scholar ID does not match logged-in account, reject without creating complaint."""
+    s1 = _chat_step(client, "Raise a complaint", token=student_token)
+    _chat_step(client, "Electricity", session_id=s1["sessionId"], token=student_token)
+    _chat_step(client, "Central Library", session_id=s1["sessionId"], token=student_token)
+    _chat_step(
+        client,
+        "Power socket on table 3 is completely dead and has scorch marks.",
+        session_id=s1["sessionId"],
+        token=student_token,
+    )
+
+    # Type someone else's Scholar ID
+    mismatch = _chat_step(client, "MCA/2024/999", session_id=s1["sessionId"], token=student_token)
+    assert mismatch["step"] == "scholarId"
+    assert "does not match your signed-in account" in mismatch["reply"]
+    # Draft is kept intact
+    assert mismatch["draft"]["category"] == "Electricity"
+
+
+def test_registered_user_badlein_changes_field_for_complaint_only(client, student_token):
+    """'Badlein' allows updating a field for this complaint without modifying account."""
+    from database import users
+
+    s1 = _chat_step(client, "Raise a complaint", token=student_token)
+    _chat_step(client, "Water", session_id=s1["sessionId"], token=student_token)
+    _chat_step(client, "Academic Block C", session_id=s1["sessionId"], token=student_token)
+    _chat_step(
+        client,
+        "Drinking water dispenser is dispensing hot water instead of normal water.",
+        session_id=s1["sessionId"],
+        token=student_token,
+    )
+    _chat_step(client, "USR-1001", session_id=s1["sessionId"], token=student_token)
+    _chat_step(client, "9876543210", session_id=s1["sessionId"], token=student_token)
+
+    # Click 'Badlein' / 'Change details'
+    change_choice = _chat_step(client, "Change details", session_id=s1["sessionId"], token=student_token)
+    assert change_choice["step"] == "choose_identity_field"
+    assert "Mobile" in change_choice["quickReplies"]
+
+    # Choose Mobile
+    ask_mob = _chat_step(client, "Mobile", session_id=s1["sessionId"], token=student_token)
+    assert ask_mob["step"] == "mobile"
+
+    # Enter new mobile
+    reconfirm_step = _chat_step(client, "9123456789", session_id=s1["sessionId"], token=student_token)
+    assert reconfirm_step["step"] == "confirm_identity"
+    assert "9123456789" in reconfirm_step["reply"]
+
+    # Confirm updated identity
+    conf_step = _chat_step(client, "Yes, details are correct", session_id=s1["sessionId"], token=student_token)
+    assert conf_step["step"] == "confirm"
+    assert "9123456789" in conf_step["reply"]
+
+    # Submit
+    done = _chat_step(client, "Submit", session_id=s1["sessionId"], token=student_token, action="submit", expected_status=201)
+    assert done["step"] == "done"
+
+    # Verify user account in DB does not get modified with this complaint's mobile
+    user_doc = users().find_one({"id": "USR-1001"})
+    assert user_doc.get("mobile") != "9123456789"
+
+
+def test_systematic_guest_flow_complete_sequence(client):
+    """Guest flow: Category -> Location -> Description -> Scholar ID -> Name -> Mobile -> Email -> Summary -> Submit."""
+    s1 = _chat_step(client, "Raise a complaint")
+    assert s1["step"] == "category"
+
+    s2 = _chat_step(client, "Water", session_id=s1["sessionId"])
+    assert s2["step"] == "location"
+
+    s3 = _chat_step(client, "Gayatri Bhavan, Room 101", session_id=s1["sessionId"])
+    assert s3["step"] == "description"
+
+    s4 = _chat_step(
+        client,
+        "Water tap is constantly dripping and splashing all over the floor.",
+        session_id=s1["sessionId"],
+    )
+    assert s4["step"] == "scholarId"
+
+    s5 = _chat_step(client, "GUEST/2026/088", session_id=s1["sessionId"])
+    assert s5["step"] == "name"
+
+    s6 = _chat_step(client, "Pooja Sharma", session_id=s1["sessionId"])
+    assert s6["step"] == "mobile"
+
+    s7 = _chat_step(client, "9876543210", session_id=s1["sessionId"])
+    assert s7["step"] == "email"
+
+    s8 = _chat_step(client, "pooja.sharma@example.com", session_id=s1["sessionId"])
+    assert s8["step"] == "confirm"
+    assert "Pooja Sharma" in s8["reply"]
+    assert "9876543210" in s8["reply"]
+    assert "pooja.sharma@example.com" in s8["reply"]
+
+    done = _chat_step(client, "Submit", session_id=s1["sessionId"], action="submit", expected_status=201)
+    assert done["step"] == "done"
+    assert done["complaint"]["id"].startswith("DSVV-GRV-")
+
+
+def test_chip_label_or_command_not_validated_as_free_text_answer(client):
+    """Guard: sending chip labels or commands at a free-text step does not count as answer."""
+    s1 = _chat_step(client, "Raise a complaint")
+    _chat_step(client, "Water", session_id=s1["sessionId"])
+    _chat_step(client, "Gayatri Bhavan, Room 101", session_id=s1["sessionId"])
+    _chat_step(
+        client,
+        "Water tap is constantly dripping and splashing all over the floor.",
+        session_id=s1["sessionId"],
+    )
+    _chat_step(client, "GUEST/2026/089", session_id=s1["sessionId"])
+    name_step = _chat_step(client, "Pooja Sharma", session_id=s1["sessionId"])
+    assert name_step["step"] == "mobile"
+
+    # Send a command word at mobile step
+    guard_res = _chat_step(client, "Help & FAQs", session_id=s1["sessionId"])
+    assert guard_res["step"] == "mobile"
+    assert "requested information" in guard_res["reply"]
+    # Draft mobile is NOT set to 'Help & FAQs'
+    assert "mobile" not in guard_res["draft"]
+
+
+def test_active_flow_restart_prompt_continue_and_start_new(client):
+    """If 'Raise a complaint' is sent mid-flow, ask 'Continue' or 'Start new'."""
+    s1 = _chat_step(client, "Raise a complaint")
+    _chat_step(client, "Water", session_id=s1["sessionId"])
+    _chat_step(client, "Gayatri Bhavan, Room 101", session_id=s1["sessionId"])
+
+    # User taps "Raise a complaint" again while at description step
+    prompt_restart = _chat_step(client, "Raise a complaint", session_id=s1["sessionId"])
+    assert prompt_restart["step"] == "confirm_restart"
+    assert "Continue" in prompt_restart["quickReplies"]
+    assert "Start new" in prompt_restart["quickReplies"]
+
+    # Case 1: Continue
+    continued = _chat_step(client, "Continue", session_id=s1["sessionId"])
+    assert continued["step"] == "description"
+    assert continued["draft"]["category"] == "Water"
+
+    # Mid-flow again: choose 'Start new'
+    _chat_step(client, "Raise a complaint", session_id=s1["sessionId"])
+    restarted = _chat_step(client, "Start new", session_id=s1["sessionId"])
+    assert restarted["step"] == "category"
+    assert not restarted["draft"].get("category")
+
+
+def test_three_invalid_attempts_offers_help_and_back_works(client):
+    """After 3 invalid attempts, bot offers Help & Cancel; Back returns to previous question."""
+    s1 = _chat_step(client, "Raise a complaint")
+    _chat_step(client, "Water", session_id=s1["sessionId"])
+    _chat_step(client, "Gayatri Bhavan, Room 101", session_id=s1["sessionId"])
+    _chat_step(
+        client,
+        "Water tap is constantly dripping and splashing all over the floor.",
+        session_id=s1["sessionId"],
+    )
+    _chat_step(client, "GUEST/2026/090", session_id=s1["sessionId"])
+    _chat_step(client, "Rohan Verma", session_id=s1["sessionId"])
+
+    # Invalid mobile attempt 1
+    inv1 = _chat_step(client, "123", session_id=s1["sessionId"])
+    assert inv1["step"] == "mobile"
+
+    # Invalid mobile attempt 2
+    inv2 = _chat_step(client, "invalid-num", session_id=s1["sessionId"])
+    assert inv2["step"] == "mobile"
+
+    # Invalid mobile attempt 3 -> triggers Help & Cancel
+    inv3 = _chat_step(client, "0000", session_id=s1["sessionId"])
+    assert inv3["step"] == "mobile"
+    assert "Help" in inv3["quickReplies"]
+    assert "Cancel" in inv3["quickReplies"]
+    assert "Back" in inv3["quickReplies"]
+    assert "trouble" in inv3["reply"].lower() or "help" in inv3["reply"].lower()
+
+    # Click Back -> goes back to Name step
+    backed = _chat_step(client, "Back", session_id=s1["sessionId"], action="back")
+    assert backed["step"] == "name"
+    assert "Rohan Verma" not in backed["draft"].get("name", "")
+
+
+def test_faq_interrupt_mid_flow_preserves_draft_and_resumes(client):
+    """FAQ asked during slot collection is answered in one message and pending question repeated."""
+    s1 = _chat_step(client, "Raise a complaint")
+    _chat_step(client, "Water", session_id=s1["sessionId"])
+    _chat_step(client, "Gayatri Bhavan, Room 101", session_id=s1["sessionId"])
+
+    # Mid-flow FAQ question
+    faq_interruption = _chat_step(client, "How do I upload a photo?", session_id=s1["sessionId"])
+    assert faq_interruption["step"] == "description"
+    assert "Photo" in faq_interruption["reply"]
+    assert "Returning to your complaint" in faq_interruption["reply"]
+    assert faq_interruption["draft"]["category"] == "Water"
+
+
+def test_language_purity_hindi_hinglish_english(client):
+    """Pure Hindi, Hinglish, or English without mixing languages in replies."""
+    # Hindi
+    hi_step = _chat_step(client, "शिकायत दर्ज करें")
+    assert hi_step["step"] == "category"
+    assert any("\u0900" <= c <= "\u097f" for c in hi_step["reply"])
+    assert "रद्द करें" in hi_step["quickReplies"]
+
+    # Hinglish
+    hing_step = _chat_step(client, "shikayat darj karo")
+    assert hing_step["step"] == "category"
+    assert not any("\u0900" <= c <= "\u097f" for c in hing_step["reply"])
+    assert "Cancel" in hing_step["quickReplies"]
+
+    # English
+    en_step = _chat_step(client, "Raise a complaint")
+    assert en_step["step"] == "category"
+    assert not any("\u0900" <= c <= "\u097f" for c in en_step["reply"])
+    assert "Cancel" in en_step["quickReplies"]
+

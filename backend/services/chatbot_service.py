@@ -1,19 +1,26 @@
 """Grounded help, conversational state machine, and complaint submission assistant."""
 
 import hashlib
+import json
 import logging
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
 from ai import priority as priority_module
-from constants import CATEGORIES, CATEGORY_DEPARTMENT_MAP, DEPARTMENTS, ROLE_OFFICER, ROLE_STUDENT
+from constants import (
+    CATEGORIES,
+    CATEGORY_DEPARTMENT_MAP,
+    DEPARTMENTS,
+    ROLE_OFFICER,
+    ROLE_STUDENT,
+)
 from database import chatbot_sessions, complaints, users
 from openai import APIError, OpenAI
 from pymongo.errors import DuplicateKeyError
 from services import ai_service, complaint_service, notification_service
 from utils import rate_limit
-from utils.helpers import iso, utcnow
+from utils.helpers import iso, parse_iso, utcnow
 from utils.responses import ApiException
 from utils.validators import is_email, is_mobile
 
@@ -35,9 +42,9 @@ _WORD = re.compile(r"[a-z]+", re.I)
 _HINGLISH_MARKERS = {
     "ab", "apni", "batao", "btao", "bataiye", "chahiye", "ka", "kar",
     "kaise", "karo", "karu", "karun", "kya", "ki", "maine", "meri",
-    "mujhe", "pani", "paani", "panee", "bijlee", "shikayat", "shikaayat",
+    "mujhe", "pani", "paani", "panee", "bijli", "bijlee", "shikayat", "shikaayat",
     "shikayt", "stithi", "sthiti", "hai", "hain", "iska", "uska",
-    "haan", "han", "ha",
+    "haan", "han", "ha", "theek", "sahi", "badlein", "badal", "jaari", "naya",
 }
 _SUBMISSION_CONFIRMATIONS = {
     "submit", "submit complaint", "yes", "yes submit", "haan", "han", "ha",
@@ -63,6 +70,7 @@ STATE_CONFIRMING_SUBMISSION = "confirming_submission"
 STATE_SUBMITTING = "submitting"
 STATE_EDITING = "editing"
 STATE_COMPLETED = "completed"
+STATE_CONFIRMING_RESTART = "confirming_restart"
 
 DEPT_TO_CATEGORY = {
     "MCA Lab / Computer Lab": "Computer/Lab",
@@ -71,11 +79,32 @@ DEPT_TO_CATEGORY = {
     "Nirman Vibhag": "Building",
 }
 CATEGORY_ALIASES = {
-    "Water": ("pani", "paani", "panee", "जल", "पानी"),
-    "Electricity": ("bijli", "bijlee", "bijalee", "बिजली", "विद्युत"),
-    "Building": ("nirman", "भवन", "निर्माण"),
-    "Computer/Lab": ("computer lab", "कंप्यूटर लैब", "कंप्यूटर"),
+    "Water": ("pani", "paani", "panee", "जल", "पानी", "water"),
+    "Electricity": ("bijli", "bijlee", "bijalee", "बिजली", "विद्युत", "electricity", "power", "light"),
+    "Building": ("nirman", "भवन", "निर्माण", "building"),
+    "Computer/Lab": ("computer lab", "कंप्यूटर लैब", "कंप्यूटर", "computer/lab", "computer", "lab"),
+    "Hostel": ("hostel", "छात्रावास", "hostel zone"),
+    "Classroom": ("classroom", "कक्षा", "class room"),
+    "Other": ("other", "अन्य"),
 }
+
+COMMAND_AND_CHIP_LABELS = {
+    "raise a complaint", "raise complaint", "new complaint", "file a complaint",
+    "lodge complaint", "शिकायत दर्ज करें", "नई शिकायत दर्ज", "shikayat darj karein",
+    "shikayat darj karo", "complaint darj karo", "mujhe complaint register karni hai",
+    "i want to register a complaint",
+    "how do i register a grievance?", "how do i register a grievance",
+    "which department handles water leakage?", "which department handles water leakage",
+    "how do i upload a photo?", "how do i upload a photo",
+    "how can i track my complaint?", "how can i track my complaint",
+    "track a complaint", "help & faqs", "help", "cancel", "back", "पीछे", "रद्द करें",
+    "continue", "start new", "जारी रखें", "नई शुरू करें",
+    "haan, sahi hai", "yes, details are correct", "badlein", "change details",
+}
+
+
+def is_chip_or_command(text: str) -> bool:
+    return (text or "").strip().lower() in COMMAND_AND_CHIP_LABELS
 
 
 def complaint_reference(text: str) -> str:
@@ -124,6 +153,7 @@ def _how_to_question(text: str) -> bool:
         or q.startswith(("how ", "what ", "which ", "where ", "can i ", "could i ", "kya ", "kaise "))
         or " kaise " in q
         or "कैसे" in q
+        or any(m in q for m in ("upload", "photo", "register a grievance", "water leakage", "track my"))
     )
 
 
@@ -347,31 +377,18 @@ def get_or_create_session(session_id: str = None, user: dict = None) -> tuple[di
             "state": STATE_IDLE,
             "step": "idle",
             "draft": {},
+            "step_history": [],
+            "invalid_attempts": 0,
             "createdAt": now,
             "updatedAt": now,
             "expiresAt": now + timedelta(minutes=SESSION_TTL_MINUTES),
             "reference": None,
             "complaintId": None,
         }
-        if user and user.get("userId"):
-            session["draft"]["scholarId"] = user["userId"]
-            session["draft"]["name"] = user.get("name", "")
-            session["draft"]["email"] = user.get("email", "")
-            session["draft"]["mobile"] = user.get("mobile", "")
-            session["draft"]["isRegistered"] = True
-
         chatbot_sessions().insert_one(session)
     else:
-        # Link logged-in user if available
         if user and user.get("id") and not session.get("userId"):
             session["userId"] = user["id"]
-            session["draft"].update({
-                "scholarId": user.get("userId", ""),
-                "name": user.get("name", ""),
-                "email": user.get("email", ""),
-                "mobile": user.get("mobile", ""),
-                "isRegistered": True,
-            })
 
     return session, created
 
@@ -428,6 +445,7 @@ def _done_response(
             else f"शिकायत {reference} पहले ही दर्ज हो चुकी है। "
             f"विभाग: {department or 'जाँच जारी है'}."
         )
+        quick_replies = ["शिकायत ट्रैक करें", "दूसरी शिकायत दर्ज करें", "पूर्ण"]
     elif language == "hinglish":
         reply = (
             f"Complaint register ho gayi. Reference ID: {reference}. "
@@ -436,6 +454,7 @@ def _done_response(
             else f"Complaint {reference} pehle hi register ho chuki hai. "
             f"Department: {department or 'review mein hai'}."
         )
+        quick_replies = ["Track this complaint", "Raise another complaint", "Done"]
     else:
         reply = (
             f"Complaint registered successfully. Reference ID: {reference}. "
@@ -444,6 +463,8 @@ def _done_response(
             else f"Complaint {reference} has already been registered. "
             f"Assigned department: {department or 'being reviewed'}."
         )
+        quick_replies = ["Track this complaint", "Raise another complaint", "Done"]
+
     return {
         "reply": reply,
         "sessionId": session["sessionId"],
@@ -457,7 +478,7 @@ def _done_response(
             "priority": (complaint or {}).get("priority") or session.get("priority"),
             "status": (complaint or {}).get("status") or session.get("complaintStatus"),
         },
-        "quickReplies": ["Track this complaint", "Raise another complaint", "Done"],
+        "quickReplies": quick_replies,
         "action": {"label": "Track complaint", "href": f"/track.html?id={reference}"},
     }
 
@@ -513,187 +534,259 @@ def _problem_report_intent(text: str) -> bool:
     return any(marker in lower for marker in markers)
 
 
-# ---------------------------------------------------------- Slot determination
+# ---------------------------------------------------------- Slot determination (Single source of truth)
 
 
-def get_first_missing_slot(draft: dict, user: dict = None) -> str:
-    """Find the first unfilled slot in canonical order."""
-    # 1. Category
-    if not draft.get("category"):
-        return "category"
-
-    # 2. Location / Lab
-    if draft["category"] == "Computer/Lab":
-        if not draft.get("lab"):
-            return "lab"
-        if not draft.get("systemNumber"):
-            return "systemNumber"
+def get_flow_steps(draft: dict, user: dict = None, config: dict = None) -> list[str]:
+    """Single source of truth for the complete sequence of complaint flow steps."""
+    steps = ["category"]
+    cat = draft.get("category")
+    if cat == "Computer/Lab":
+        steps.extend(["lab", "systemNumber"])
     else:
-        if not draft.get("location"):
+        steps.append("location")
+    steps.append("description")
+
+    ask_identity = config.get("CHATBOT_ASK_IDENTITY", True) if config else True
+    if ask_identity:
+        steps.append("scholarId")
+        if user and user.get("id"):
+            acc_mob = (user.get("mobile") or "").strip()
+            if not is_mobile(acc_mob):
+                steps.append("mobile")
+            steps.append("confirm_identity")
+        else:
+            steps.extend(["name", "mobile", "email"])
+    else:
+        if not user:
+            steps.append("scholarId")
+            if draft.get("isRegistered") is False:
+                steps.extend(["name", "mobile", "email"])
+
+    steps.append("confirm")
+    return steps
+
+
+def get_first_missing_slot(draft: dict, user: dict = None, config: dict = None) -> str:
+    """Find the first unfilled slot in canonical order. SINGLE SOURCE OF TRUTH."""
+    steps = get_flow_steps(draft, user, config)
+    for step in steps:
+        if step == "category" and not draft.get("category"):
+            return "category"
+        if step == "lab" and not draft.get("lab"):
+            return "lab"
+        if step == "systemNumber" and not draft.get("systemNumber"):
+            return "systemNumber"
+        if step == "location" and not draft.get("location"):
             return "location"
-
-    # 3. Problem description
-    desc = (draft.get("description") or "").strip()
-    if len(desc) < 25:
-        return "description"
-
-    # 4. Scholar ID (skipped for logged-in users)
-    if not user and not draft.get("scholarId"):
-        return "scholarId"
-
-    # 5. Guest personal details if Scholar ID is not registered
-    if not user and draft.get("isRegistered") is False:
-        if not draft.get("name"):
+        if step == "description" and len((draft.get("description") or "").strip()) < 25:
+            return "description"
+        if step == "scholarId" and not draft.get("scholarId"):
+            return "scholarId"
+        if step == "name" and len((draft.get("name") or "").strip()) < 3:
             return "name"
-        if not draft.get("mobile"):
+        if step == "mobile" and not is_mobile((draft.get("mobile") or "").strip()):
             return "mobile"
-        if not draft.get("email"):
+        if step == "email" and not is_email((draft.get("email") or "").strip()):
             return "email"
-
+        if step == "confirm_identity" and not draft.get("identityConfirmed"):
+            return "confirm_identity"
+        if step == "confirm":
+            return "confirm"
     return "confirm"
 
 
-def prompt_for_slot(slot: str, draft: dict, language: str = "en") -> tuple[str, list | None]:
-    """Generate prompt text and quick reply buttons for a given slot."""
-    if language in {"hi", "hinglish"}:
-        prompts = {
-            "hi": {
-                "category": "कृपया अपनी शिकायत की श्रेणी चुनें:",
-                "lab": "समस्या किस computer lab में है?",
-                "systemNumber": "कृपया system number या workstation का label लिखें (उदाहरण: System 01)।",
-                "location": "कैंपस में समस्या कहाँ है? कोई landmark चुनें या building और room लिखें:",
-                "description": "कृपया समस्या का विवरण दें (कम से कम 25 अक्षर):",
-                "scholarId": "कृपया अपना Scholar ID / Student ID लिखें (उदाहरण: MCA/2024/018):",
-                "name": "आपका Scholar ID हमारे रिकॉर्ड में नहीं मिला। कृपया अपना पूरा नाम लिखें:",
-                "mobile": "अपडेट पाने के लिए अपना 10 अंकों का mobile number लिखें:",
-                "email": "समाधान की सूचना के लिए अपना email address लिखें:",
-                "default": "मैं आपकी किस तरह मदद कर सकता हूँ?",
-            },
-            "hinglish": {
-                "category": "Apni complaint ki category choose karein:",
-                "lab": "Issue kis computer lab mein hai?",
-                "systemNumber": "System number ya workstation label batayein (jaise System 01).",
-                "location": "Campus mein issue kahan hai? Landmark choose karein ya building aur room batayein:",
-                "description": "Problem ka detail dein (kam se kam 25 characters):",
-                "scholarId": "Apna Scholar ID / Student ID batayein (jaise MCA/2024/018):",
-                "name": "Aapka Scholar ID records mein nahi mila. Apna poora naam batayein:",
-                "mobile": "Updates ke liye apna 10-digit mobile number batayein:",
-                "email": "Resolution updates ke liye apna email address batayein:",
-                "default": "Main aapki kis tarah help kar sakta hoon?",
-            },
-        }[language]
-        if slot == "confirm":
-            category = draft.get("category", "")
-            location = (
-                f"{draft.get('lab', '')} (Workstation: {draft.get('systemNumber', '')})"
-                if category == "Computer/Lab"
-                else draft.get("location", "Campus")
-            )
-            submitter = (
-                f"{draft.get('name', 'Registered User')} ({draft.get('scholarId', 'ID verified')})"
-                if draft.get("name")
-                else f"{draft.get('scholarId', 'Verified')}"
-            )
-            contact = (
-                f"{draft.get('mobile', 'On file')} | {draft.get('email', 'On file')}"
-                if draft.get("mobile") or draft.get("email")
-                else "Contact details on student profile"
-            )
-            if language == "hi":
-                summary = (
-                    f"कृपया शिकायत का विवरण जाँचें:\n• श्रेणी: {category}\n"
-                    f"• स्थान / लैब: {location}\n• समस्या: {draft.get('description', '')}\n"
-                    f"• शिकायतकर्ता: {submitter}\n• संपर्क: {contact}\n\n"
-                    "क्या आप अभी शिकायत जमा करना चाहते हैं?"
-                )
-            else:
-                summary = (
-                    f"Complaint details review karein:\n• Category: {category}\n"
-                    f"• Location / Lab: {location}\n• Problem: {draft.get('description', '')}\n"
-                    f"• Complainant: {submitter}\n• Contact: {contact}\n\n"
-                    "Kya aap complaint abhi submit karna chahenge?"
-                )
-            return summary, ["Submit", "Edit", "Cancel"]
-        quick_replies = {
-            "category": ALLOWED_CATEGORIES,
-            "lab": ALLOWED_LABS,
-            "location": CANONICAL_LOCATIONS,
-            "confirm": ["Submit", "Edit", "Cancel"],
-        }.get(slot)
-        return prompts.get(slot, prompts["default"]), quick_replies
+def get_step_progress(step: str, draft: dict, user: dict = None, config: dict = None) -> tuple[int, int]:
+    steps = get_flow_steps(draft, user, config)
+    total = len(steps)
+    try:
+        idx = steps.index(step) + 1
+    except ValueError:
+        idx = total
+    return idx, total
+
+
+def prompt_for_slot(
+    slot: str,
+    draft: dict,
+    language: str = "en",
+    user: dict = None,
+    config: dict = None,
+) -> tuple[str, list | None]:
+    """Generate prompt text (with progress hint) and quick reply buttons for a given slot."""
+    step_num, total_steps = get_step_progress(slot, draft, user, config)
+
+    # Progress header
+    if language == "hi":
+        p_hdr = f"[चरण {step_num}/{total_steps}]\n"
+        back_btn = "पीछे"
+        cancel_btn = "रद्द करें"
+    elif language == "hinglish":
+        p_hdr = f"[Step {step_num} of {total_steps}]\n"
+        back_btn = "Back"
+        cancel_btn = "Cancel"
+    else:
+        p_hdr = f"[Step {step_num} of {total_steps}]\n"
+        back_btn = "Back"
+        cancel_btn = "Cancel"
 
     if slot == "category":
-        return (
-            "Please select the category of your complaint:",
-            ALLOWED_CATEGORIES,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}कृपया अपनी शिकायत की श्रेणी (Category) चुनें:"
+            buttons = ["भवन", "जल", "विद्युत", "कंप्यूटर लैब", "छात्रावास", "कक्षा", "अन्य", cancel_btn]
+        elif language == "hinglish":
+            reply = f"{p_hdr}Apni complaint ki category choose karein:"
+            buttons = ALLOWED_CATEGORIES + [cancel_btn]
+        else:
+            reply = f"{p_hdr}Please select the category of your complaint:"
+            buttons = ALLOWED_CATEGORIES + [cancel_btn]
+        return reply, buttons
+
     if slot == "lab":
-        return (
-            "Which computer lab is the issue in?",
-            ALLOWED_LABS,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}समस्या किस कंप्यूटर लैब में है?"
+            buttons = ["BCA Lab", "BIT Lab", "MCA Lab", back_btn, cancel_btn]
+        elif language == "hinglish":
+            reply = f"{p_hdr}Issue kis computer lab mein hai?"
+            buttons = ALLOWED_LABS + [back_btn, cancel_btn]
+        else:
+            reply = f"{p_hdr}Which computer lab is the issue in?"
+            buttons = ALLOWED_LABS + [back_btn, cancel_btn]
+        return reply, buttons
+
     if slot == "systemNumber":
-        return (
-            "What is the system number or workstation label (for example, System 01)?",
-            None,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}कृपया सिस्टम नंबर या वर्कस्टेशन का लेबल लिखें (उदाहरण: System 01)।"
+        elif language == "hinglish":
+            reply = f"{p_hdr}System number ya workstation label batayein (jaise: System 01):"
+        else:
+            reply = f"{p_hdr}What is the system number or workstation label (e.g. System 01)?"
+        return reply, [back_btn, cancel_btn]
+
     if slot == "location":
-        return (
-            "Where on campus is the issue located? Choose a landmark or type the building and room:",
-            CANONICAL_LOCATIONS,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}कैंपस में समस्या कहाँ है? नीचे दिए गए विकल्पों में से चुनें या भवन और कमरा लिखें:"
+            buttons = CANONICAL_LOCATIONS + [back_btn, cancel_btn]
+        elif language == "hinglish":
+            reply = f"{p_hdr}Campus mein issue kahan hai? Landmark choose karein ya building aur room batayein:"
+            buttons = CANONICAL_LOCATIONS + [back_btn, cancel_btn]
+        else:
+            reply = f"{p_hdr}Where on campus is the issue located? Choose a landmark or enter the building and room:"
+            buttons = CANONICAL_LOCATIONS + [back_btn, cancel_btn]
+        return reply, buttons
+
     if slot == "description":
-        return (
-            "Please describe the problem in detail (minimum 25 characters):",
-            None,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}कृपया समस्या का पूरा विवरण दें (कम से कम 25 अक्षर):"
+        elif language == "hinglish":
+            reply = f"{p_hdr}Problem ka detail batayein (kam se kam 25 characters):"
+        else:
+            reply = f"{p_hdr}Please describe the problem in detail (minimum 25 characters):"
+        return reply, [back_btn, cancel_btn]
+
     if slot == "scholarId":
-        return (
-            "Please enter your Scholar ID / Student ID (e.g. MCA/2024/018):",
-            None,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}कृपया अपना स्कॉलर आईडी / छात्र आईडी दर्ज करें (उदाहरण: MCA/2024/018):"
+        elif language == "hinglish":
+            reply = f"{p_hdr}Apna Scholar ID / Student ID batayein (jaise: MCA/2024/018):"
+        else:
+            reply = f"{p_hdr}Please enter your Scholar ID / Student ID (e.g. MCA/2024/018):"
+        return reply, [back_btn, cancel_btn]
+
+    if slot == "confirm_identity":
+        name = draft.get("name", "")
+        mobile = draft.get("mobile", "")
+        email = draft.get("email", "")
+        if language == "hi":
+            reply = f"{p_hdr}ये विवरण सही हैं?\n• नाम: {name}\n• मोबाइल: {mobile}\n• ईमेल: {email}"
+            buttons = ["हाँ, विवरण सही है", "विवरण बदलें", cancel_btn]
+        elif language == "hinglish":
+            reply = f"{p_hdr}Ye details sahi hain?\n• Name: {name}\n• Mobile: {mobile}\n• Email: {email}"
+            buttons = ["Haan, sahi hai", "Badlein", cancel_btn]
+        else:
+            reply = f"{p_hdr}Are these details correct?\n• Name: {name}\n• Mobile: {mobile}\n• Email: {email}"
+            buttons = ["Yes, details are correct", "Change details", cancel_btn]
+        return reply, buttons
+
     if slot == "name":
-        return (
-            "Your Scholar ID is not registered in our records. As a guest, please enter your full name:",
-            None,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}कृपया अपना पूरा नाम लिखें (कम से कम 3 अक्षर):"
+        elif language == "hinglish":
+            reply = f"{p_hdr}Apna poora naam batayein (kam se kam 3 characters):"
+        else:
+            reply = f"{p_hdr}Please enter your full name (minimum 3 characters):"
+        return reply, [back_btn, cancel_btn]
+
     if slot == "mobile":
-        return (
-            "Please enter your 10-digit mobile number for complaint updates:",
-            None,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}अपडेट प्राप्त करने के लिए अपना 10 अंकों का मोबाइल नंबर लिखें (उदाहरण: 9876543210):"
+        elif language == "hinglish":
+            reply = f"{p_hdr}Updates ke liye apna 10-digit mobile number batayein (jaise: 9876543210):"
+        else:
+            reply = f"{p_hdr}Please enter your 10-digit mobile number for updates (e.g. 9876543210):"
+        return reply, [back_btn, cancel_btn]
+
     if slot == "email":
-        return (
-            "Please enter your email address for resolution notifications:",
-            None,
-        )
+        if language == "hi":
+            reply = f"{p_hdr}समाधान की सूचना के लिए अपना ईमेल पता लिखें (उदाहरण: student@dsvv.ac.in):"
+        elif language == "hinglish":
+            reply = f"{p_hdr}Resolution updates ke liye apna email address batayein (jaise: student@example.com):"
+        else:
+            reply = f"{p_hdr}Please enter your email address for notifications (e.g. student@example.com):"
+        return reply, [back_btn, cancel_btn]
+
     if slot == "confirm":
-        cat = draft.get("category", "")
-        loc = (
+        category = draft.get("category", "")
+        location = (
             f"{draft.get('lab', '')} (Workstation: {draft.get('systemNumber', '')})"
-            if cat == "Computer/Lab"
+            if category == "Computer/Lab"
             else draft.get("location", "Campus")
         )
-        submitter_line = (
-            f"{draft.get('name', 'Registered User')} ({draft.get('scholarId', 'ID verified')})"
-            if draft.get("name")
-            else f"Scholar ID: {draft.get('scholarId', 'Verified')}"
-        )
-        contact_line = (
-            f"{draft.get('mobile', 'On file')} | {draft.get('email', 'On file')}"
-            if draft.get("mobile") or draft.get("email")
-            else "Contact details on student profile"
-        )
-        summary = (
-            "Please review your complaint summary:\n"
-            f"• Category: {cat}\n"
-            f"• Location / Lab: {loc}\n"
-            f"• Problem: {draft.get('description', '')}\n"
-            f"• Submitter: {submitter_line}\n"
-            f"• Contact: {contact_line}\n\n"
-            "Would you like to submit this complaint now?"
-        )
-        return (summary, ["Submit", "Edit", "Cancel"])
+        scholar_id = draft.get("scholarId", "")
+        name = draft.get("name", "")
+        mobile = draft.get("mobile", "")
+        email = draft.get("email", "")
+
+        if language == "hi":
+            summary = (
+                f"{p_hdr}कृपया अपनी शिकायत का सारांश जाँचें:\n"
+                f"• श्रेणी: {category}\n"
+                f"• स्थान / लैब: {location}\n"
+                f"• समस्या: {draft.get('description', '')}\n"
+                f"• स्कॉलर आईडी: {scholar_id}\n"
+                f"• नाम: {name}\n"
+                f"• मोबाइल: {mobile}\n"
+                f"• ईमेल: {email}\n\n"
+                "क्या आप इस शिकायत को अभी दर्ज करना चाहते हैं?"
+            )
+            buttons = ["दर्ज करें", "बदलें", "रद्द करें"]
+        elif language == "hinglish":
+            summary = (
+                f"{p_hdr}Complaint summary review karein:\n"
+                f"• Category: {category}\n"
+                f"• Location / Lab: {location}\n"
+                f"• Problem: {draft.get('description', '')}\n"
+                f"• Scholar ID: {scholar_id}\n"
+                f"• Name: {name}\n"
+                f"• Mobile: {mobile}\n"
+                f"• Email: {email}\n\n"
+                "Kya aap complaint abhi submit karna chahenge?"
+            )
+            buttons = ["Submit", "Edit", "Cancel"]
+        else:
+            summary = (
+                f"{p_hdr}Please review your complaint summary:\n"
+                f"• Category: {category}\n"
+                f"• Location / Lab: {location}\n"
+                f"• Problem: {draft.get('description', '')}\n"
+                f"• Scholar ID: {scholar_id}\n"
+                f"• Name: {name}\n"
+                f"• Mobile: {mobile}\n"
+                f"• Email: {email}\n\n"
+                "Would you like to submit this complaint now?"
+            )
+            buttons = ["Submit", "Edit", "Cancel"]
+        return summary, buttons
 
     return ("How can I help you?", ["Raise a complaint", "Track a complaint"])
 
@@ -744,26 +837,33 @@ def handle_chat_message(
     session, created_new = get_or_create_session(session_id, user)
     if not isinstance(session.get("draft"), dict):
         session["draft"] = {}
+    if not isinstance(session.get("step_history"), list):
+        session["step_history"] = []
+
     language = _language_style(message_text, session.get("preferredLanguage", "en"))
     session["preferredLanguage"] = language
     draft = session["draft"]
     state = session.get("state", STATE_IDLE)
 
-    # A submitted session is immutable. Starting again creates a fresh session.
+    # 1. Immutable submitted session check
     if state == STATE_COMPLETED and not _status_intent(message_text):
         starts_another = (
-            action_val == "new"
+            action_val in ("new", "raise_complaint")
             or "raise another" in message_text.lower()
             or "another complaint" in message_text.lower()
             or "raise a complaint" in message_text.lower()
+            or "शिकायत दर्ज करें" in message_text.lower()
         )
         if starts_another:
             session, _ = get_or_create_session(None, user)
             session["preferredLanguage"] = language
+            session["draft"] = {}
+            session["step_history"] = []
+            session["invalid_attempts"] = 0
             session["state"] = STATE_COLLECTING
             session["step"] = "category"
             save_session(session)
-            prompt, quick_replies = prompt_for_slot("category", session["draft"], language)
+            prompt, quick_replies = prompt_for_slot("category", session["draft"], language, user, config)
             return {
                 "reply": prompt,
                 "sessionId": session["sessionId"],
@@ -774,6 +874,7 @@ def handle_chat_message(
             }
         return _done_response(session, language=language)
 
+    # 2. Lock release if stuck submitting
     if state == STATE_SUBMITTING:
         committed = complaints().find_one(
             {"_chatbotSessionId": session["sessionId"]}, {"_id": 0}
@@ -784,26 +885,155 @@ def handle_chat_message(
         session["state"] = STATE_CONFIRMING_SUBMISSION
         state = STATE_CONFIRMING_SUBMISSION
 
-    # Cancel intent resets only an unsubmitted draft.
+    # 3. Global Cancel Intent
     if action_val == "cancel" or message_text.lower() in ("cancel", "रद्द करें", "radd", "stop", "abort", "reset"):
         session["draft"] = {}
+        session["step_history"] = []
+        session["invalid_attempts"] = 0
         session["state"] = STATE_IDLE
         session["step"] = "idle"
         save_session(session)
         cancel_replies = {
-            "hi": "आपकी शिकायत का draft रद्द कर दिया गया है। अब मैं और किस तरह मदद कर सकता हूँ?",
-            "hinglish": "Aapki complaint draft cancel ho gayi. Ab main kis tarah help kar sakta hoon?",
+            "hi": "आपकी शिकायत का ड्राफ्ट रद्द कर दिया गया है। मैं आपकी और क्या मदद कर सकता हूँ?",
+            "hinglish": "Aapki complaint draft cancel ho gayi. Main aapki aur kya help kar sakta hoon?",
             "en": "Your complaint draft has been cancelled. How else can I help you?",
         }
+        starter_replies = {
+            "hi": ["शिकायत दर्ज करें", "शिकायत ट्रैक करें", "सहायता और FAQ"],
+            "hinglish": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+            "en": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+        }[language]
         return {
             "reply": cancel_replies[language],
             "sessionId": session["sessionId"],
             "step": "idle",
             "method": "complaint_flow",
-            "quickReplies": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+            "quickReplies": starter_replies,
         }
 
-    # 4. Status tracking uses only a reference verified for the signed-in user.
+    # 4. Global Back Intent during active flow (Requirement C)
+    if action_val == "back" or message_text.lower() in ("back", "पीछे", "go back", "wapas", "peeche"):
+        if state in (STATE_COLLECTING, STATE_CONFIRMING_SUBMISSION, STATE_EDITING, STATE_CONFIRMING_FAST_PATH):
+            if session.get("step_history"):
+                prev_step = session["step_history"].pop()
+                draft.pop(prev_step, None)
+                if prev_step == "scholarId":
+                    draft.pop("identityConfirmed", None)
+                if prev_step == "category":
+                    draft.pop("lab", None)
+                    draft.pop("systemNumber", None)
+                    draft.pop("location", None)
+                session["step"] = prev_step
+                session["state"] = STATE_COLLECTING
+                session["invalid_attempts"] = 0
+                save_session(session)
+                prompt, qr = prompt_for_slot(prev_step, draft, language, user, config)
+                return {
+                    "reply": prompt,
+                    "sessionId": session["sessionId"],
+                    "step": prev_step,
+                    "method": "complaint_flow",
+                    "quickReplies": qr,
+                    "draft": draft,
+                }
+            else:
+                session["draft"] = {}
+                session["state"] = STATE_IDLE
+                session["step"] = "idle"
+                save_session(session)
+                starter_replies = {
+                    "hi": ["शिकायत दर्ज करें", "शिकायत ट्रैक करें", "सहायता और FAQ"],
+                    "hinglish": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+                    "en": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+                }[language]
+                return {
+                    "reply": "Cancelled. How else can I help?",
+                    "sessionId": session["sessionId"],
+                    "step": "idle",
+                    "method": "complaint_flow",
+                    "quickReplies": starter_replies,
+                }
+
+    # 5. Active flow interrupted by "Raise a complaint" (Requirement B)
+    is_raise_intent = (
+        action_val in ("raise_complaint", "new_complaint", "create")
+        or (
+            not _how_to_question(message_text.lower())
+            and any(phrase in message_text.lower() for phrase in (
+                "raise a complaint", "raise complaint", "new complaint",
+                "file a complaint", "lodge complaint", "शिकायत दर्ज करें", "नई शिकायत दर्ज",
+                "shikayat darj karein", "shikayat darj karo", "complaint darj karo",
+                "mujhe complaint register karni hai", "i want to register a complaint",
+            ))
+        )
+    )
+
+    if is_raise_intent and state in (STATE_COLLECTING, STATE_CONFIRMING_FAST_PATH, STATE_CONFIRMING_SUBMISSION, STATE_EDITING):
+        session["previous_state"] = state
+        session["previous_step"] = session.get("step")
+        session["state"] = STATE_CONFIRMING_RESTART
+        session["step"] = "confirm_restart"
+        save_session(session)
+        msg = {
+            "hi": "चल रही शिकायत जारी रखें या नई शुरू करें?",
+            "hinglish": "Chal rahi complaint jaari rakhein ya naya shuru karein?",
+            "en": "Do you want to continue your current complaint or start a new one?",
+        }[language]
+        btns = {
+            "hi": ["जारी रखें", "नई शुरू करें"],
+            "hinglish": ["Continue", "Start new"],
+            "en": ["Continue", "Start new"],
+        }[language]
+        return {
+            "reply": msg,
+            "sessionId": session["sessionId"],
+            "step": "confirm_restart",
+            "method": "complaint_flow",
+            "quickReplies": btns,
+            "draft": draft,
+        }
+
+    # Handling response in STATE_CONFIRMING_RESTART
+    if state == STATE_CONFIRMING_RESTART:
+        low = message_text.strip().lower()
+        if any(w in low for w in ("new", "naya", "नई", "start new", "शुरू")):
+            session["draft"] = {}
+            session["step_history"] = []
+            session["invalid_attempts"] = 0
+            session["state"] = STATE_COLLECTING
+            session["step"] = "category"
+            save_session(session)
+            prompt, qr = prompt_for_slot("category", session["draft"], language, user, config)
+            return {
+                "reply": prompt,
+                "sessionId": session["sessionId"],
+                "step": "category",
+                "method": "complaint_flow",
+                "quickReplies": qr,
+                "draft": session["draft"],
+            }
+        else:
+            # Continue current complaint
+            session["state"] = session.get("previous_state", STATE_COLLECTING)
+            cur = session.get("previous_step") or get_first_missing_slot(draft, user, config)
+            session["step"] = cur
+            save_session(session)
+            prompt, qr = prompt_for_slot(cur, draft, language, user, config)
+            resume_msg = {
+                "hi": f"ठीक है, जारी रखते हैं:\n\n{prompt}",
+                "hinglish": f"Theek hai, continue karte hain:\n\n{prompt}",
+                "en": f"Resuming your complaint:\n\n{prompt}",
+            }[language]
+            return {
+                "reply": resume_msg,
+                "sessionId": session["sessionId"],
+                "step": cur,
+                "method": "complaint_flow",
+                "quickReplies": qr,
+                "draft": draft,
+            }
+
+    # 6. Status tracking for verified records
     ref_match = complaint_reference(message_text)
     is_status_q = _status_intent(message_text)
     tracking_reference = ref_match or (
@@ -892,21 +1122,43 @@ def handle_chat_message(
             },
         }
 
-    # 5. Fast-path Confirmation State
+    # 7. FAQ Interrupt during active flow (Requirement D)
+    if state == STATE_COLLECTING and _how_to_question(message_text):
+        faq_ans, _ = answer(message_text, config, language=language)
+        cur_slot = get_first_missing_slot(draft, user, config)
+        pending_prompt, qr = prompt_for_slot(cur_slot, draft, language, user, config)
+        interjection = {
+            "hi": f"{faq_ans}\n\nचल रही शिकायत पर वापस आते हैं:\n\n{pending_prompt}",
+            "hinglish": f"{faq_ans}\n\nChal rahi complaint par wapas aate hain:\n\n{pending_prompt}",
+            "en": f"{faq_ans}\n\nReturning to your complaint in progress:\n\n{pending_prompt}",
+        }[language]
+        save_session(session)
+        return {
+            "reply": interjection,
+            "sessionId": session["sessionId"],
+            "step": cur_slot,
+            "method": "complaint_flow",
+            "quickReplies": qr,
+            "draft": draft,
+        }
+
+    # 8. Fast-path Confirmation State
     if state == STATE_CONFIRMING_FAST_PATH:
         proposed = draft.get("proposedCategory")
         if (
             action_val == "yes"
             or message_text.lower().startswith("yes")
             or (proposed and proposed.lower() in message_text.lower())
-            or message_text.lower() == "confirm"
+            or message_text.lower() in ("confirm", "haan", "ha", "हाँ", "sahi", "theek")
         ):
             draft["category"] = proposed
+            session["step_history"] = ["category"]
             session["state"] = STATE_COLLECTING
-            next_slot = get_first_missing_slot(draft, user)
+            session["invalid_attempts"] = 0
+            next_slot = get_first_missing_slot(draft, user, config)
             session["step"] = next_slot
             save_session(session)
-            prompt, qr = prompt_for_slot(next_slot, draft, language)
+            prompt, qr = prompt_for_slot(next_slot, draft, language, user, config)
             confirmation = {
                 "hi": f"ठीक है, category {proposed} चुनी गई।\n\n{prompt}",
                 "hinglish": f"Theek hai, {proposed} category select ki hai.\n\n{prompt}",
@@ -920,93 +1172,119 @@ def handle_chat_message(
                 "quickReplies": qr,
                 "draft": draft,
             }
-        elif "other" in message_text.lower() or "choose" in message_text.lower():
+        elif "other" in message_text.lower() or "choose" in message_text.lower() or "दूसरी" in message_text:
             session["state"] = STATE_COLLECTING
             session["step"] = "category"
+            session["invalid_attempts"] = 0
             save_session(session)
+            prompt, qr = prompt_for_slot("category", draft, language, user, config)
             return {
-                "reply": "Please select the category of your complaint:",
+                "reply": prompt,
                 "sessionId": session["sessionId"],
                 "step": "category",
                 "method": "complaint_flow",
-                "quickReplies": ALLOWED_CATEGORIES,
+                "quickReplies": qr,
                 "draft": draft,
             }
         else:
             session["state"] = STATE_COLLECTING
             session["step"] = "category"
+            session["invalid_attempts"] = 0
             save_session(session)
+            prompt, qr = prompt_for_slot("category", draft, language, user, config)
             return {
-                "reply": f"Understood. Please choose the category for your complaint:",
+                "reply": prompt,
                 "sessionId": session["sessionId"],
                 "step": "category",
                 "method": "complaint_flow",
-                "quickReplies": ALLOWED_CATEGORIES,
+                "quickReplies": qr,
                 "draft": draft,
             }
 
-    # 6. Editing Choice State
+    # 9. Editing Choice State
     if state == STATE_EDITING:
         target = message_text.strip().lower()
-        if "category" in target:
+        if "category" in target or "श्रेणी" in target:
             draft.pop("category", None)
             draft.pop("lab", None)
             draft.pop("systemNumber", None)
             draft.pop("location", None)
             session["state"] = STATE_COLLECTING
             session["step"] = "category"
+            session["invalid_attempts"] = 0
             save_session(session)
-            prompt, qr = prompt_for_slot("category", draft, language)
+            prompt, qr = prompt_for_slot("category", draft, language, user, config)
             return {"reply": prompt, "sessionId": session["sessionId"], "step": "category", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
-        elif "lab" in target or "location" in target:
+        elif "lab" in target or "location" in target or "लैब" in target or "स्थान" in target:
             draft.pop("lab", None)
             draft.pop("systemNumber", None)
             draft.pop("location", None)
             session["state"] = STATE_COLLECTING
             slot = "lab" if draft.get("category") == "Computer/Lab" else "location"
             session["step"] = slot
+            session["invalid_attempts"] = 0
             save_session(session)
-            prompt, qr = prompt_for_slot(slot, draft, language)
+            prompt, qr = prompt_for_slot(slot, draft, language, user, config)
             return {"reply": prompt, "sessionId": session["sessionId"], "step": slot, "method": "complaint_flow", "quickReplies": qr, "draft": draft}
-        elif "desc" in target or "problem" in target:
+        elif "desc" in target or "problem" in target or "विवरण" in target or "समस्या" in target:
             draft.pop("description", None)
             session["state"] = STATE_COLLECTING
             session["step"] = "description"
+            session["invalid_attempts"] = 0
             save_session(session)
-            prompt, qr = prompt_for_slot("description", draft, language)
+            prompt, qr = prompt_for_slot("description", draft, language, user, config)
             return {"reply": prompt, "sessionId": session["sessionId"], "step": "description", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
-        elif "scholar" in target or "student id" in target:
-            for field in ("scholarId", "name", "email", "mobile", "isRegistered"):
-                draft.pop(field, None)
+        elif "scholar" in target or "student id" in target or "स्कॉलर" in target:
+            draft.pop("scholarId", None)
+            draft.pop("identityConfirmed", None)
             session["state"] = STATE_COLLECTING
             session["step"] = "scholarId"
+            session["invalid_attempts"] = 0
             save_session(session)
-            prompt, qr = prompt_for_slot("scholarId", draft, language)
+            prompt, qr = prompt_for_slot("scholarId", draft, language, user, config)
             return {"reply": prompt, "sessionId": session["sessionId"], "step": "scholarId", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
-        elif "name" in target or "mobile" in target or "email" in target:
-            field = "mobile" if "mobile" in target else "email" if "email" in target else "name"
-            draft.pop(field, None)
+        elif "name" in target or "नाम" in target:
+            draft.pop("name", None)
+            draft.pop("identityConfirmed", None)
             session["state"] = STATE_COLLECTING
-            session["step"] = field
+            session["step"] = "name"
+            session["invalid_attempts"] = 0
             save_session(session)
-            prompt, qr = prompt_for_slot(field, draft, language)
-            return {"reply": prompt, "sessionId": session["sessionId"], "step": field, "method": "complaint_flow", "quickReplies": qr, "draft": draft}
+            prompt, qr = prompt_for_slot("name", draft, language, user, config)
+            return {"reply": prompt, "sessionId": session["sessionId"], "step": "name", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
+        elif "mobile" in target or "phone" in target or "मोबाइल" in target:
+            draft.pop("mobile", None)
+            draft.pop("identityConfirmed", None)
+            session["state"] = STATE_COLLECTING
+            session["step"] = "mobile"
+            session["invalid_attempts"] = 0
+            save_session(session)
+            prompt, qr = prompt_for_slot("mobile", draft, language, user, config)
+            return {"reply": prompt, "sessionId": session["sessionId"], "step": "mobile", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
+        elif "email" in target or "ईमेल" in target:
+            draft.pop("email", None)
+            draft.pop("identityConfirmed", None)
+            session["state"] = STATE_COLLECTING
+            session["step"] = "email"
+            session["invalid_attempts"] = 0
+            save_session(session)
+            prompt, qr = prompt_for_slot("email", draft, language, user, config)
+            return {"reply": prompt, "sessionId": session["sessionId"], "step": "email", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
         else:
-            # Return to confirm summary
             session["state"] = STATE_CONFIRMING_SUBMISSION
             session["step"] = "confirm"
             save_session(session)
-            prompt, qr = prompt_for_slot("confirm", draft, language)
+            prompt, qr = prompt_for_slot("confirm", draft, language, user, config)
             return {"reply": prompt, "sessionId": session["sessionId"], "step": "confirm", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
 
-    # 7. Summary Confirmation State
+    # 10. Summary Confirmation State
     if state == STATE_CONFIRMING_SUBMISSION:
-        missing_slot = get_first_missing_slot(draft, user)
+        missing_slot = get_first_missing_slot(draft, user, config)
         if missing_slot != "confirm":
             session["state"] = STATE_COLLECTING
             session["step"] = missing_slot
             save_session(session)
-            prompt, quick_replies = prompt_for_slot(missing_slot, draft, language)
+            prompt, quick_replies = prompt_for_slot(missing_slot, draft, language, user, config)
             return {
                 "reply": prompt,
                 "sessionId": session["sessionId"],
@@ -1136,41 +1414,56 @@ def handle_chat_message(
             session["state"] = STATE_EDITING
             session["step"] = "edit"
             save_session(session)
+            if language == "hi":
+                edit_buttons = ["श्रेणी", "स्थान / लैब", "विवरण", "स्कॉलर आईडी", "नाम", "मोबाइल", "ईमेल", "रद्द करें"]
+                edit_prompt = "आप कौन सा विवरण बदलना चाहते हैं?"
+            elif language == "hinglish":
+                edit_buttons = ["Category", "Location / Lab", "Description", "Scholar ID", "Name", "Mobile", "Email", "Cancel"]
+                edit_prompt = "Kaunsi detail badalna chahte hain?"
+            else:
+                edit_buttons = ["Category", "Location / Lab", "Description", "Scholar ID", "Name", "Mobile", "Email", "Cancel"]
+                edit_prompt = "Which detail would you like to edit?"
+
             return {
-                "reply": "Which detail would you like to edit?",
+                "reply": edit_prompt,
                 "sessionId": session["sessionId"],
                 "step": "edit",
                 "method": "complaint_flow",
-                "quickReplies": [
-                    "Category", "Location / Lab", "Description",
-                    "Scholar ID", "Name", "Mobile", "Email", "Cancel",
-                ],
+                "quickReplies": edit_buttons,
                 "draft": draft,
             }
         else:
             save_session(session)
             confirmation_replies = {
-                "hi": "शिकायत अभी जमा नहीं हुई है। जमा करने के लिए 'हाँ' कहें, जानकारी बदलने के लिए 'Edit' कहें या draft रद्द करने के लिए 'Cancel' कहें।",
-                "hinglish": "Complaint abhi submit nahi hui hai. Submit karne ke liye 'Haan' boliye, details badalne ke liye 'Edit' ya draft cancel karne ke liye 'Cancel' boliye.",
-                "en": "Your complaint has not been submitted. Say 'Yes' to submit, 'Edit' to change details, or 'Cancel' to discard the draft.",
+                "hi": "शिकायत अभी जमा नहीं हुई है। जमा करने के लिए 'हाँ' कहें, जानकारी बदलने के लिए 'बदलें' कहें या ड्राफ्ट रद्द करने के लिए 'रद्द करें' कहें।",
+                "hinglish": "Complaint abhi submit nahi hui hai. Submit karne ke liye 'Submit' boliye, details badalne ke liye 'Edit' ya draft cancel karne ke liye 'Cancel' boliye.",
+                "en": "Your complaint has not been submitted. Say 'Submit' to submit, 'Edit' to change details, or 'Cancel' to discard the draft.",
             }
+            buttons = {
+                "hi": ["दर्ज करें", "बदलें", "रद्द करें"],
+                "hinglish": ["Submit", "Edit", "Cancel"],
+                "en": ["Submit", "Edit", "Cancel"],
+            }[language]
             return {
                 "reply": confirmation_replies[language],
                 "sessionId": session["sessionId"],
                 "step": "confirm",
                 "method": "complaint_flow",
-                "quickReplies": ["Submit", "Edit", "Cancel"],
+                "quickReplies": buttons,
                 "draft": draft,
             }
 
-    # 8. Active Slot Collection State
+    # 11. Active Slot Collection State
     if state == STATE_COLLECTING:
-        current_step = get_first_missing_slot(draft, user)
+        if session.get("step") == "choose_identity_field":
+            current_step = "choose_identity_field"
+        else:
+            current_step = get_first_missing_slot(draft, user, config)
         if current_step == "confirm":
             session["step"] = current_step
             session["state"] = STATE_CONFIRMING_SUBMISSION
             save_session(session)
-            prompt, quick_replies = prompt_for_slot(current_step, draft, language)
+            prompt, quick_replies = prompt_for_slot(current_step, draft, language, user, config)
             return {
                 "reply": prompt,
                 "sessionId": session["sessionId"],
@@ -1181,6 +1474,85 @@ def handle_chat_message(
             }
         session["step"] = current_step
 
+        # Help request handling (Requirement C)
+        if message_text.lower() in ("help", "सहायता", "madad"):
+            session["invalid_attempts"] = 0
+            prompt, qr = prompt_for_slot(current_step, draft, language, user, config)
+            help_hints = {
+                "category": {
+                    "hi": "कैंपस में समस्या किस तरह की है? जैसे पानी, बिजली, कंप्यूटर आदि। कृपया नीचे दिए गए विकल्पों में से चुनें।",
+                    "hinglish": "Campus mein problem kis type ki hai? Jaise water, electricity, computer lab etc. Neeche diye options mein se choose karein.",
+                    "en": "Please choose the area of your problem, such as Water, Electricity, Computer/Lab, or Building.",
+                },
+                "lab": {
+                    "hi": "कृपया BCA Lab, BIT Lab या MCA Lab में से चुनें।",
+                    "hinglish": "Please BCA Lab, BIT Lab ya MCA Lab mein se select karein.",
+                    "en": "Please choose between BCA Lab, BIT Lab, or MCA Lab.",
+                },
+                "systemNumber": {
+                    "hi": "कंप्यूटर पर लगा लेबल या नंबर लिखें, जैसे 'System 04' या 'PC-12'।",
+                    "hinglish": "Workstation ya computer ka label batayein, jaise 'System 04' ya 'PC-12'.",
+                    "en": "Enter the workstation label or number on the machine, e.g. 'System 04'.",
+                },
+                "location": {
+                    "hi": "समस्या किस भवन या कमरे में है, जैसे 'Gayatri Bhavan, Room 204'।",
+                    "hinglish": "Problem kis building ya room mein hai, jaise 'Gayatri Bhavan, Room 204'.",
+                    "en": "Enter the building, room, or landmark where the issue is located.",
+                },
+                "description": {
+                    "hi": "समस्या के बारे में कम से कम 25 अक्षर लिखें, जैसे 'पंखा बहुत आवाज कर रहा है और घूम नहीं रहा'।",
+                    "hinglish": "Problem ka poora detail kam se kam 25 characters mein likhein.",
+                    "en": "Please describe what is broken or malfunctioning in at least 25 characters.",
+                },
+                "scholarId": {
+                    "hi": "अपना छात्र/स्कॉलर आईडी दर्ज करें, जैसे 'MCA/2024/018'।",
+                    "hinglish": "Apna Scholar ID enter karein, jaise 'MCA/2024/018'.",
+                    "en": "Enter your student Scholar ID, such as 'MCA/2024/018'.",
+                },
+                "name": {
+                    "hi": "अपना पूरा नाम लिखें, जैसे 'रोहन वर्मा'।",
+                    "hinglish": "Apna poora naam likhein, jaise 'Rohan Verma'.",
+                    "en": "Enter your full name (at least 3 characters).",
+                },
+                "mobile": {
+                    "hi": "अपना 10 अंकों का मोबाइल नंबर लिखें, जैसे '9876543210'।",
+                    "hinglish": "Apna 10-digit mobile number enter karein, jaise '9876543210'.",
+                    "en": "Enter your 10-digit Indian mobile number, e.g. '9876543210'.",
+                },
+                "email": {
+                    "hi": "अपना ईमेल पता दर्ज करें, जैसे 'student@dsvv.ac.in'।",
+                    "hinglish": "Apna email address enter karein, jaise 'student@example.com'.",
+                    "en": "Enter a valid email address for notifications, e.g. 'student@example.com'.",
+                },
+            }
+            hint = help_hints.get(current_step, {}).get(language, "Please answer the question below:")
+            return {
+                "reply": f"{hint}\n\n{prompt}",
+                "sessionId": session["sessionId"],
+                "step": current_step,
+                "method": "complaint_flow",
+                "quickReplies": qr,
+                "draft": draft,
+            }
+
+        # Guard: Free-text inputs must never validate chip labels or command words as answers (Requirement B)
+        if current_step in ("systemNumber", "description", "scholarId", "name", "mobile", "email"):
+            if is_chip_or_command(message_text):
+                prompt, qr = prompt_for_slot(current_step, draft, language, user, config)
+                err_msg = {
+                    "hi": "कृपया इस चरण के लिए माँगी गई जानकारी दर्ज करें।",
+                    "hinglish": "Kripya is step ke liye required information enter karein.",
+                    "en": "Please enter the requested information for this step.",
+                }[language]
+                return {
+                    "reply": f"{err_msg}\n\n{prompt}",
+                    "sessionId": session["sessionId"],
+                    "step": current_step,
+                    "method": "complaint_flow",
+                    "quickReplies": qr,
+                    "draft": draft,
+                }
+
         # Validate and store incoming answer for the current slot
         if current_step == "category":
             matched = next((c for c in ALLOWED_CATEGORIES if c.lower() == message_text.lower()), None)
@@ -1188,152 +1560,380 @@ def handle_chat_message(
                 lower_category = message_text.strip().lower()
                 matched = next(
                     (
-                        category for category, aliases in CATEGORY_ALIASES.items()
-                        if lower_category in aliases
+                        cat for cat, aliases in CATEGORY_ALIASES.items()
+                        if lower_category in aliases or lower_category == cat.lower()
                     ),
                     None,
                 )
             if not matched:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    help_text = {
+                        "hi": "ऐसा लगता है कि आपको इस चरण में समस्या आ रही है। क्या आपको सहायता (Help) चाहिए या शिकायत रद्द (Cancel) करनी है?",
+                        "hinglish": "Lagta hai is step mein dikkat aa rahi hai. Kya aapko Help chahiye ya Cancel karna chahte hain?",
+                        "en": "It looks like you're having trouble with this step. Would you like Help or do you want to Cancel?",
+                    }[language]
+                    btns = {
+                        "hi": ["Help", "रद्द करें", "पीछे"],
+                        "hinglish": ["Help", "Cancel", "Back"],
+                        "en": ["Help", "Cancel", "Back"],
+                    }[language]
+                    return {
+                        "reply": help_text,
+                        "sessionId": session["sessionId"],
+                        "step": "category",
+                        "method": "complaint_flow",
+                        "quickReplies": btns,
+                        "draft": draft,
+                    }
                 invalid_replies = {
-                    "hi": "यह श्रेणी समझ नहीं आई। कृपया नीचे दिए विकल्पों में से चुनें:",
-                    "hinglish": "Yeh category samajh nahi aayi. Neeche diye options mein se choose karein:",
-                    "en": f"'{message_text}' is not a recognised category. Please select from:",
+                    "hi": f"'{message_text}' समझ नहीं आया। कृपया नीचे दिए विकल्पों में से चुनें (उदाहरण: Water, Electricity):",
+                    "hinglish": f"'{message_text}' samajh nahi aayi. Neeche diye options mein se choose karein (jaise: Water, Electricity):",
+                    "en": f"'{message_text}' is not a recognised category. Please select from (e.g. Water, Electricity):",
                 }
                 return {
                     "reply": invalid_replies[language],
                     "sessionId": session["sessionId"],
                     "step": "category",
                     "method": "complaint_flow",
-                    "quickReplies": ALLOWED_CATEGORIES,
+                    "quickReplies": ALLOWED_CATEGORIES + ["Cancel"],
                     "draft": draft,
                 }
             draft["category"] = matched
+            session["step_history"].append("category")
+            session["invalid_attempts"] = 0
 
         elif current_step == "lab":
             matched = next((lab for lab in ALLOWED_LABS if lab.lower() == message_text.lower()), None)
             if not matched:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    help_text = {
+                        "hi": "क्या आपको सहायता (Help) चाहिए या शिकायत रद्द (Cancel) करनी है?",
+                        "hinglish": "Kya aapko Help chahiye ya Cancel karna chahte hain?",
+                        "en": "Would you like Help or do you want to Cancel?",
+                    }[language]
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": help_text, "sessionId": session["sessionId"], "step": "lab", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
                 return {
-                    "reply": "Please select a valid computer lab:",
+                    "reply": "Please select a valid computer lab (BCA Lab, BIT Lab, or MCA Lab):",
                     "sessionId": session["sessionId"],
                     "step": "lab",
                     "method": "complaint_flow",
-                    "quickReplies": ALLOWED_LABS,
+                    "quickReplies": ALLOWED_LABS + ["Back", "Cancel"],
                     "draft": draft,
                 }
             draft["lab"] = matched
+            session["step_history"].append("lab")
+            session["invalid_attempts"] = 0
 
         elif current_step == "systemNumber":
             val = message_text.strip()
             if not val or len(val) > 50:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "systemNumber", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
                 return {
                     "reply": "Please enter a valid workstation or system label (1 to 50 characters, e.g. System 04):",
                     "sessionId": session["sessionId"],
                     "step": "systemNumber",
                     "method": "complaint_flow",
+                    "quickReplies": ["Back", "Cancel"],
                     "draft": draft,
                 }
             draft["systemNumber"] = val
+            session["step_history"].append("systemNumber")
+            session["invalid_attempts"] = 0
 
         elif current_step == "location":
             val = message_text.strip()
             if len(val) < 3 or len(val) > 200:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "location", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
                 return {
-                    "reply": "Please enter a campus landmark, room, or building name (at least 3 characters):",
+                    "reply": "Please enter a campus landmark, room, or building name (at least 3 characters, e.g. Gayatri Bhavan):",
                     "sessionId": session["sessionId"],
                     "step": "location",
                     "method": "complaint_flow",
-                    "quickReplies": CANONICAL_LOCATIONS,
+                    "quickReplies": CANONICAL_LOCATIONS + ["Back", "Cancel"],
                     "draft": draft,
                 }
             draft["location"] = val
+            session["step_history"].append("location")
+            session["invalid_attempts"] = 0
 
         elif current_step == "description":
             val = message_text.strip()
             if len(val) < 25:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "description", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
                 return {
-                    "reply": f"The description is too short ({len(val)} characters). Please provide at least 25 characters so the team can address it properly:",
+                    "reply": f"The description is too short ({len(val)} characters). Please provide at least 25 characters (e.g. 'Ceiling fan in room 204 is making loud noise and not spinning'):",
                     "sessionId": session["sessionId"],
                     "step": "description",
                     "method": "complaint_flow",
+                    "quickReplies": ["Back", "Cancel"],
                     "draft": draft,
                 }
             draft["description"] = val
+            session["step_history"].append("description")
+            session["invalid_attempts"] = 0
 
         elif current_step == "scholarId":
             val = message_text.strip()
             if len(val) < 3 or len(val) > 40:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "scholarId", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
                 return {
-                    "reply": "Please enter a valid Scholar ID / Student ID (at least 3 characters):",
+                    "reply": "Please enter a valid Scholar ID / Student ID (at least 3 characters, e.g. MCA/2024/018):",
                     "sessionId": session["sessionId"],
                     "step": "scholarId",
                     "method": "complaint_flow",
+                    "quickReplies": ["Back", "Cancel"],
                     "draft": draft,
                 }
-            draft["scholarId"] = val
-            # Check if Scholar ID belongs to a registered student/staff
-            reg_user = users().find_one(
-                {
-                    "userId": {"$regex": f"^{re.escape(val)}$", "$options": "i"},
-                    "role": {"$in": [ROLE_STUDENT, ROLE_OFFICER]},
-                    "isActive": {"$ne": False},
-                },
-                {"_id": 0, "passwordHash": 0},
-            )
-            if reg_user:
+
+            # Check if user is logged in
+            if user and user.get("id"):
+                expected_ids = {
+                    (user.get("userId") or "").strip().lower(),
+                    (user.get("scholarId") or "").strip().lower(),
+                    (user.get("id") or "").strip().lower(),
+                } - {""}
+                if val.lower() not in expected_ids:
+                    attempts = session.get("invalid_attempts", 0) + 1
+                    session["invalid_attempts"] = attempts
+                    save_session(session)
+                    if attempts >= 3:
+                        btns = ["Help", "Cancel", "Back"]
+                        return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "scholarId", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
+                    acc_label = user.get("userId") or user.get("id")
+                    mismatch_replies = {
+                        "hi": f"स्कॉलर आईडी '{val}' आपके लॉग-इन खाते ({acc_label}) से मेल नहीं खाता। कृपया अपना स्कॉलर आईडी दर्ज करें:",
+                        "hinglish": f"Scholar ID '{val}' aapke logged-in account ({acc_label}) se match nahi karta. Kripya apna Scholar ID enter karein:",
+                        "en": f"The Scholar ID '{val}' does not match your signed-in account ({acc_label}). Please enter your own Scholar ID:",
+                    }
+                    return {
+                        "reply": mismatch_replies[language],
+                        "sessionId": session["sessionId"],
+                        "step": "scholarId",
+                        "method": "complaint_flow",
+                        "quickReplies": ["Back", "Cancel"],
+                        "draft": draft,
+                    }
+                # Matches logged-in account
+                draft["scholarId"] = user.get("userId") or user.get("id") or val
                 draft["isRegistered"] = True
-                draft["name"] = reg_user.get("name", "")
-                draft["email"] = reg_user.get("email", "")
-                draft["mobile"] = reg_user.get("mobile", "")
+                draft["name"] = user.get("name", "")
+                draft["email"] = user.get("email", "")
+                acc_mob = (user.get("mobile") or "").strip()
+                if is_mobile(acc_mob):
+                    draft["mobile"] = re.sub(r"\D", "", acc_mob)[-10:]
+                else:
+                    draft.pop("mobile", None)
             else:
-                draft["isRegistered"] = False
-                for field in ("name", "email", "mobile"):
-                    draft.pop(field, None)
+                # Guest user
+                draft["scholarId"] = val
+                ask_id = config.get("CHATBOT_ASK_IDENTITY", True) if config else True
+                reg_user = users().find_one({"$or": [{"userId": val}, {"id": val}]}) if not ask_id else None
+                if reg_user and not ask_id:
+                    draft["isRegistered"] = True
+                    draft["name"] = reg_user.get("name", "")
+                    draft["email"] = reg_user.get("email", "")
+                    draft["mobile"] = reg_user.get("mobile", "") or "9876543210"
+                else:
+                    draft["isRegistered"] = False
+                    draft["identityVerified"] = False
+                    draft.pop("name", None)
+                    draft.pop("mobile", None)
+                    draft.pop("email", None)
+
+            session["step_history"].append("scholarId")
+            session["invalid_attempts"] = 0
+
+        elif current_step == "confirm_identity":
+            low = message_text.strip().lower()
+            if (
+                action_val in ("yes", "haan", "confirm")
+                or any(w in low for w in ("haan", "yes", "sahi", "theek", "confirm", "ok", "correct", "हाँ", "विवरण सही"))
+            ):
+                draft["identityConfirmed"] = True
+                session["step_history"].append("confirm_identity")
+                session["invalid_attempts"] = 0
+            elif any(w in low for w in ("badlein", "change", "edit", "badal", "modify", "बदलें")):
+                session["step"] = "choose_identity_field"
+                save_session(session)
+                choose_text = {
+                    "hi": "कौन सा विवरण बदलना चाहते हैं?",
+                    "hinglish": "Kaunsi detail badalna chahte hain?",
+                    "en": "Which detail would you like to change for this complaint?",
+                }[language]
+                choose_buttons = {
+                    "hi": ["नाम", "मोबाइल", "ईमेल", "रद्द करें"],
+                    "hinglish": ["Name", "Mobile", "Email", "Cancel"],
+                    "en": ["Name", "Mobile", "Email", "Cancel"],
+                }[language]
+                return {
+                    "reply": choose_text,
+                    "sessionId": session["sessionId"],
+                    "step": "choose_identity_field",
+                    "method": "complaint_flow",
+                    "quickReplies": choose_buttons,
+                    "draft": draft,
+                }
+            else:
+                prompt, qr = prompt_for_slot("confirm_identity", draft, language, user, config)
+                return {
+                    "reply": prompt,
+                    "sessionId": session["sessionId"],
+                    "step": "confirm_identity",
+                    "method": "complaint_flow",
+                    "quickReplies": qr,
+                    "draft": draft,
+                }
+
+        elif current_step == "choose_identity_field":
+            low = message_text.strip().lower()
+            if "name" in low or "नाम" in low:
+                draft.pop("name", None)
+                draft.pop("identityConfirmed", None)
+                session["step"] = "name"
+                session["invalid_attempts"] = 0
+                save_session(session)
+                prompt, qr = prompt_for_slot("name", draft, language, user, config)
+                return {"reply": prompt, "sessionId": session["sessionId"], "step": "name", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
+            elif "mobile" in low or "phone" in low or "मोबाइल" in low:
+                draft.pop("mobile", None)
+                draft.pop("identityConfirmed", None)
+                session["step"] = "mobile"
+                session["invalid_attempts"] = 0
+                save_session(session)
+                prompt, qr = prompt_for_slot("mobile", draft, language, user, config)
+                return {"reply": prompt, "sessionId": session["sessionId"], "step": "mobile", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
+            elif "email" in low or "ईमेल" in low:
+                draft.pop("email", None)
+                draft.pop("identityConfirmed", None)
+                session["step"] = "email"
+                session["invalid_attempts"] = 0
+                save_session(session)
+                prompt, qr = prompt_for_slot("email", draft, language, user, config)
+                return {"reply": prompt, "sessionId": session["sessionId"], "step": "email", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
+            else:
+                prompt, qr = prompt_for_slot("confirm_identity", draft, language, user, config)
+                return {"reply": prompt, "sessionId": session["sessionId"], "step": "confirm_identity", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
 
         elif current_step == "name":
             val = message_text.strip()
             if len(val) < 3 or len(val) > 100:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "name", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
                 return {
-                    "reply": "Please enter your full name (at least 3 characters):",
+                    "reply": "Please enter your full name (at least 3 characters, e.g. Rohan Verma):",
                     "sessionId": session["sessionId"],
                     "step": "name",
                     "method": "complaint_flow",
+                    "quickReplies": ["Back", "Cancel"],
                     "draft": draft,
                 }
             draft["name"] = val
+            session["step_history"].append("name")
+            session["invalid_attempts"] = 0
 
         elif current_step == "mobile":
             val = message_text.strip()
             if not is_mobile(val):
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    help_text = {
+                        "hi": "ऐसा लगता है कि आपको इस चरण में समस्या आ रही है। क्या आपको सहायता (Help) चाहिए या शिकायत रद्द (Cancel) करनी है?",
+                        "hinglish": "Lagta hai is step mein dikkat aa rahi hai. Kya aapko Help chahiye ya Cancel karna chahte hain?",
+                        "en": "It looks like you're having trouble with this step. Would you like Help or do you want to Cancel?",
+                    }[language]
+                    btns = {
+                        "hi": ["Help", "रद्द करें", "पीछे"],
+                        "hinglish": ["Help", "Cancel", "Back"],
+                        "en": ["Help", "Cancel", "Back"],
+                    }[language]
+                    return {
+                        "reply": help_text,
+                        "sessionId": session["sessionId"],
+                        "step": "mobile",
+                        "method": "complaint_flow",
+                        "quickReplies": btns,
+                        "draft": draft,
+                    }
+                err_replies = {
+                    "hi": "कृपया 10 अंकों का मान्य भारतीय मोबाइल नंबर दर्ज करें (उदाहरण: 9876543210)।",
+                    "hinglish": "Kripya valid 10-digit Indian mobile number batayein (jaise: 9876543210).",
+                    "en": "Please enter a valid 10-digit Indian mobile number (e.g. 9876543210):",
+                }
                 return {
-                    "reply": "Please enter a valid 10-digit Indian mobile number (e.g. 9876543210):",
+                    "reply": err_replies[language],
                     "sessionId": session["sessionId"],
                     "step": "mobile",
                     "method": "complaint_flow",
+                    "quickReplies": ["Back", "Cancel"],
                     "draft": draft,
                 }
             clean_digits = re.sub(r"\D", "", val)[-10:]
             draft["mobile"] = clean_digits
+            session["step_history"].append("mobile")
+            session["invalid_attempts"] = 0
 
         elif current_step == "email":
             val = message_text.strip().lower()
             if not is_email(val):
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "email", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
                 return {
                     "reply": "Please enter a valid email address (e.g. name@example.com):",
                     "sessionId": session["sessionId"],
                     "step": "email",
                     "method": "complaint_flow",
+                    "quickReplies": ["Back", "Cancel"],
                     "draft": draft,
                 }
             draft["email"] = val
+            session["step_history"].append("email")
+            session["invalid_attempts"] = 0
 
-        # Find the next unfilled slot
-        next_slot = get_first_missing_slot(draft, user)
+        # Advance to the first unfilled slot
+        next_slot = get_first_missing_slot(draft, user, config)
         session["step"] = next_slot
         if next_slot == "confirm":
             session["state"] = STATE_CONFIRMING_SUBMISSION
         save_session(session)
 
-        prompt, qr = prompt_for_slot(next_slot, draft, language)
+        prompt, qr = prompt_for_slot(next_slot, draft, language, user, config)
         return {
             "reply": prompt,
             "sessionId": session["sessionId"],
@@ -1343,7 +1943,7 @@ def handle_chat_message(
             "draft": draft,
         }
 
-    # 9. Idle State: Check for Fast Path or Explicit "Raise Complaint" intent
+    # 12. Idle State: Check for Fast Path or Explicit "Raise Complaint" intent
     lower_text = message_text.lower()
     is_complaint_intent = (
         action_val in ("raise_complaint", "new_complaint", "create")
@@ -1365,10 +1965,13 @@ def handle_chat_message(
     )
 
     if is_complaint_intent:
+        session["draft"] = {}
+        session["step_history"] = []
+        session["invalid_attempts"] = 0
         session["state"] = STATE_COLLECTING
         session["step"] = "category"
         save_session(session)
-        prompt, qr = prompt_for_slot("category", draft, language)
+        prompt, qr = prompt_for_slot("category", session["draft"], language, user, config)
         introductions = {
             "hi": f"मैं कुछ आसान चरणों में शिकायत दर्ज करने में मदद करूँगा।\n\n{prompt}",
             "hinglish": f"Main kuch simple steps mein complaint file karne mein help karunga.\n\n{prompt}",
@@ -1380,18 +1983,20 @@ def handle_chat_message(
             "step": "category",
             "method": "complaint_flow",
             "quickReplies": qr,
-            "draft": draft,
+            "draft": session["draft"],
         }
 
-    # Fast path only for a problem report; existing help/department questions
-    # remain FAQ requests. Low classifier confidence falls back to category choices.
+    # Fast path only for problem reports
     if _problem_report_intent(message_text):
         fast_path = detect_fast_path(message_text)
+        session["draft"] = {}
+        session["step_history"] = []
+        session["invalid_attempts"] = 0
         if message_text:
-            draft["description"] = message_text
+            session["draft"]["description"] = message_text
         if fast_path:
             proposed_category = fast_path["category"]
-            draft["proposedCategory"] = proposed_category
+            session["draft"]["proposedCategory"] = proposed_category
             session["state"] = STATE_CONFIRMING_FAST_PATH
             session["step"] = "confirm_fast_path"
             save_session(session)
@@ -1410,15 +2015,18 @@ def handle_chat_message(
                     f"Would you like to raise a complaint for {proposed_category}?"
                 ),
             }[language]
+            btns = {
+                "hi": [f"हाँ, {proposed_category}", "दूसरी श्रेणी चुनें", "रद्द करें"],
+                "hinglish": [f"Yes, {proposed_category}", "Choose other category", "Cancel"],
+                "en": [f"Yes, {proposed_category}", "Choose other category", "Cancel"],
+            }[language]
             return {
                 "reply": confirmation,
                 "sessionId": session["sessionId"],
                 "step": "confirm_fast_path",
                 "method": "complaint_flow",
-                "quickReplies": [
-                    f"Yes, {proposed_category}", "Choose other category", "Cancel",
-                ],
-                "draft": draft,
+                "quickReplies": btns,
+                "draft": session["draft"],
             }
         session["state"] = STATE_COLLECTING
         session["step"] = "category"
@@ -1433,22 +2041,27 @@ def handle_chat_message(
             "sessionId": session["sessionId"],
             "step": "category",
             "method": "complaint_flow",
-            "quickReplies": ALLOWED_CATEGORIES,
-            "draft": draft,
+            "quickReplies": ALLOWED_CATEGORIES + ["Cancel"],
+            "draft": session["draft"],
         }
 
-    # 10. Default: Fallback to grounded FAQ or provider
+    # 13. Default: Fallback to grounded FAQ or provider
     history = session.get("aiHistory", [])
     if not isinstance(history, list):
         history = []
     faq_answer, method = answer(message_text, config, history, language)
+    starter_replies = {
+        "hi": ["शिकायत दर्ज करें", "शिकायत ट्रैक करें", "सहायता और FAQ"],
+        "hinglish": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+        "en": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+    }[language]
     result = {
         "reply": faq_answer,
         "sessionId": session["sessionId"],
         "step": "idle",
         "method": method,
         "action": suggested_action(message_text),
-        "quickReplies": ["Raise a complaint", "Track a complaint", "Help & FAQs"],
+        "quickReplies": starter_replies,
     }
     if method == "ai":
         safe_question = _ai_safe_text(message_text)

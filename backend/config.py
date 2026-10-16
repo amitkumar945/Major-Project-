@@ -201,6 +201,7 @@ class Config:
     CHATBOT_GUEST_RATE_WINDOW = _int("CHATBOT_GUEST_RATE_WINDOW", 300)
     CHATBOT_GUEST_IP_LIMIT = _int("CHATBOT_GUEST_IP_LIMIT", 15)
     CHATBOT_GUEST_MOBILE_LIMIT = _int("CHATBOT_GUEST_MOBILE_LIMIT", 5)
+    CHATBOT_ASK_IDENTITY = _bool("CHATBOT_ASK_IDENTITY", True)
 
     # Configure only the number of reverse proxies that are trusted to
     # overwrite X-Forwarded-For. Zero ignores forwarded headers entirely.
