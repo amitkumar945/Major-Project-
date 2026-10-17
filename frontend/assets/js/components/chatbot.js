@@ -70,7 +70,12 @@ export function mountChatbot() {
   let speechRepliesEnabled = false
   let preferredLanguage = navigator.language?.toLowerCase().startsWith('hi') ? 'hi' : 'en'
   let busy = false
-  let sessionId = readSessionId()
+  let sessionId = ''
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY)
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
 
   if (!speechSupported) {
     micButton.disabled = true
@@ -332,6 +337,14 @@ export function mountChatbot() {
           throw new Error('The complaint could not be confirmed. Please retry to check its status.')
         }
       }
+      if (data.step === 'idle') {
+        sessionId = ''
+        try {
+          sessionStorage.removeItem(SESSION_STORAGE_KEY)
+        } catch {
+          // ignore
+        }
+      }
       addMessage(data.reply, 'assistant', data)
       if (showUser) preferredLanguage = languageStyle(question)
       speak(data.reply)
@@ -360,6 +373,13 @@ export function mountChatbot() {
     panel.hidden = true
     launcher.setAttribute('aria-expanded', 'false')
     launcher.focus()
+    sessionId = ''
+    try {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+    messages.replaceChildren()
   }
 
   launcher.addEventListener('click', () => panel.hidden ? open() : close())

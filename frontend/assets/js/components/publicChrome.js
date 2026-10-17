@@ -124,8 +124,6 @@ export function renderFooter(target = '#footer') {
   const node = qs(target)
   if (!node) return
 
-  const year = new Date().getFullYear()
-
   /*
      No social-media accounts are recorded anywhere in the project, so the
      "Follow us" column from the reference design is deliberately omitted
@@ -171,7 +169,7 @@ export function renderFooter(target = '#footer') {
         </div>
 
         <div class="footer__bottom">
-          <p>© ${year} ${esc(UNIVERSITY_NAME)}. All rights reserved.</p>
+          <p>Developed by Amit Kumar, MCA 2nd Year Student, Department of Computer Science</p>
         </div>
       </div>
     </footer>`

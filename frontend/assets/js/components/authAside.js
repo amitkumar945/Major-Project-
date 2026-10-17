@@ -4,7 +4,6 @@
  */
 
 import { icon } from './dom.js'
-import { logo } from './publicChrome.js'
 import { mountChatbot } from './chatbot.js'
 
 const POINTS = [
@@ -17,13 +16,18 @@ const POINTS = [
 export function authAside() {
   mountChatbot()
   return `
-    ${logo({ light: true })}
-
     <div>
+      <img
+        class="auth__university-logo"
+        src="/assets/img/dsvv-wordmark.png"
+        alt="Dev Sanskriti Vishwavidyalaya"
+        width="2048"
+        height="488"
+      >
       <h2>One window for every campus grievance</h2>
       <p>
-        The Dev Sanskriti Vishwavidyalaya Grievance Management System connects students and staff
-        directly with the department that can fix the problem.
+        Our grievance management system connects students and staff directly with the department
+        that can fix the problem.
       </p>
 
       <ul class="auth__points">
@@ -33,7 +37,7 @@ export function authAside() {
       </ul>
     </div>
 
-    <p class="auth__note">Academic prototype — MCA Major Project</p>`
+    <p class="auth__note">Developed by Amit Kumar, MCA 2nd Year Student, Department of Computer Science</p>`
 }
 
 export default authAside

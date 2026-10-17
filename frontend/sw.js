@@ -42,6 +42,7 @@ const SHELL_ASSETS = [
   '/assets/css/mobile.css',
   '/assets/js/pwa.js',
   '/assets/js/components/chatbot.js',
+  '/assets/img/dsvv-campus-entrance.png',
   '/assets/favicon.svg',
   '/assets/icons.svg',
   '/assets/icons/icon-192.png',
