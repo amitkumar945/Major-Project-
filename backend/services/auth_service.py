@@ -97,6 +97,7 @@ def register(values: dict, created_by: dict = None) -> dict:
         "role": role,
         "name": full_name,
         "userId": (values.get("userId") or "").strip(),
+        "scholarId": (values.get("scholarId") or values.get("userId") or "").strip(),
         "email": email,
         "mobile": (values.get("mobile") or values.get("phone") or "").strip(),
         "department": department,

@@ -367,7 +367,7 @@ def test_voice_transcript_complaint_flow_requires_spoken_confirmation(
     )
     assert desc_step["step"] == "scholarId"
     id_step = _chat_step(
-        client, "USR-1001", session_id=session_id, token=student_token
+        client, "MCA/2024/018", session_id=session_id, token=student_token
     )
     assert id_step["step"] == "mobile"
     mob_step = _chat_step(
@@ -621,7 +621,7 @@ def test_registered_user_complaint_flow(client, auth, student_token, admin_token
     assert step5["step"] == "scholarId"
 
     # 6. Scholar ID (matches student account)
-    step6 = _chat_step(client, "USR-1001", session_id=session_id, token=student_token)
+    step6 = _chat_step(client, "MCA/2024/018", session_id=session_id, token=student_token)
     assert step6["step"] == "mobile"
 
     # 7. Mobile (account has no mobile registered)
@@ -671,7 +671,7 @@ def test_computer_lab_metadata_survives_department_rerouting(client, student_tok
         session_id=session_id,
         token=student_token,
     )
-    _chat_step(client, "USR-1001", session_id=session_id, token=student_token)
+    _chat_step(client, "MCA/2024/018", session_id=session_id, token=student_token)
     _chat_step(client, "9876543210", session_id=session_id, token=student_token)
     _chat_step(client, "Yes, details are correct", session_id=session_id, token=student_token)
     created = _chat_step(
@@ -970,10 +970,10 @@ def test_expired_session_starts_a_new_chat_session(client):
     assert chatbot_sessions().find_one({"sessionId": first["sessionId"]}) is None
 
 
-def test_guest_submit_is_rate_limited_by_mobile_and_ip(client, app):
-    app.config["CHATBOT_GUEST_MOBILE_LIMIT"] = 1
-    app.config["CHATBOT_GUEST_IP_LIMIT"] = 1
-    app.config["CHATBOT_GUEST_RATE_WINDOW"] = 300
+def test_guest_submit_is_rate_limited_by_mobile_and_ip(client, app, monkeypatch):
+    monkeypatch.setitem(app.config, "CHATBOT_GUEST_MOBILE_LIMIT", 1)
+    monkeypatch.setitem(app.config, "CHATBOT_GUEST_IP_LIMIT", 1)
+    monkeypatch.setitem(app.config, "CHATBOT_GUEST_RATE_WINDOW", 300)
 
     def create_guest(ip, mobile):
         session_id = None
@@ -1131,7 +1131,7 @@ def test_failed_complaint_creation_keeps_draft_for_retry(client, student_token, 
         session_id=session_id,
         token=student_token,
     )
-    _chat_step(client, "USR-1001", session_id=session_id, token=student_token)
+    _chat_step(client, "MCA/2024/018", session_id=session_id, token=student_token)
     _chat_step(client, "9876543210", session_id=session_id, token=student_token)
     _chat_step(client, "Yes, details are correct", session_id=session_id, token=student_token)
     assert chatbot_sessions().find_one({"sessionId": session_id})["step"] == "confirm"
@@ -1232,7 +1232,7 @@ def test_systematic_registered_user_flow_with_step_counters(client, auth, studen
     assert "[Step 4 of " in s4["reply"]
 
     # 5. Scholar ID
-    s5 = _chat_step(client, "USR-1001", session_id=s1["sessionId"], token=student_token)
+    s5 = _chat_step(client, "MCA/2024/018", session_id=s1["sessionId"], token=student_token)
     assert s5["step"] == "mobile"
     assert "[Step 5 of " in s5["reply"]
 
@@ -1250,8 +1250,9 @@ def test_systematic_registered_user_flow_with_step_counters(client, auth, studen
     assert "Submit" in s7["quickReplies"]
     assert "Edit" in s7["quickReplies"]
     assert "Cancel" in s7["quickReplies"]
-    assert ("MCA/2024/018" in s7["reply"] or "USR-1001" in s7["reply"])
-    assert "9876543210" in s7["reply"]
+    assert "MCA/2024/018" in s7["reply"]
+    assert "******3210" in s7["reply"]
+    assert "9876543210" not in s7["reply"]
 
     # 8. Submit
     s8 = _chat_step(client, "Submit", session_id=s1["sessionId"], token=student_token, action="submit", expected_status=201)
@@ -1277,6 +1278,8 @@ def test_registered_user_scholar_id_mismatch_rejected(client, student_token):
     assert "does not match your signed-in account" in mismatch["reply"]
     # Draft is kept intact
     assert mismatch["draft"]["category"] == "Electricity"
+    from database import complaints
+    assert complaints().count_documents({"_chatbotSessionId": s1["sessionId"]}) == 0
 
 
 def test_registered_user_badlein_changes_field_for_complaint_only(client, student_token):
@@ -1292,7 +1295,7 @@ def test_registered_user_badlein_changes_field_for_complaint_only(client, studen
         session_id=s1["sessionId"],
         token=student_token,
     )
-    _chat_step(client, "USR-1001", session_id=s1["sessionId"], token=student_token)
+    _chat_step(client, "MCA/2024/018", session_id=s1["sessionId"], token=student_token)
     _chat_step(client, "9876543210", session_id=s1["sessionId"], token=student_token)
 
     # Click 'Badlein' / 'Change details'
@@ -1353,8 +1356,10 @@ def test_systematic_guest_flow_complete_sequence(client):
     s8 = _chat_step(client, "pooja.sharma@example.com", session_id=s1["sessionId"])
     assert s8["step"] == "confirm"
     assert "Pooja Sharma" in s8["reply"]
-    assert "9876543210" in s8["reply"]
-    assert "pooja.sharma@example.com" in s8["reply"]
+    assert "******3210" in s8["reply"]
+    assert "p***@example.com" in s8["reply"]
+    assert "9876543210" not in s8["reply"]
+    assert "pooja.sharma@example.com" not in s8["reply"]
 
     done = _chat_step(client, "Submit", session_id=s1["sessionId"], action="submit", expected_status=201)
     assert done["step"] == "done"
@@ -1475,4 +1480,352 @@ def test_language_purity_hindi_hinglish_english(client):
     assert en_step["step"] == "category"
     assert not any("\u0900" <= c <= "\u097f" for c in en_step["reply"])
     assert "Cancel" in en_step["quickReplies"]
+
+
+# ------------------------------------------------ Session Identity Memory & Second Complaint Tests
+
+
+def test_guest_second_complaint_same_session_uses_stored_identity(client):
+    """Replay exact chat: Water complaint as guest with 2525208, then 'Raise another complaint'
+    with Computer/Lab, MCA Lab, L425 -> bot asks only single 'Wahi details use karein?' confirmation,
+    then summary, then submit creates separate complaint.
+    """
+    from database import complaints
+
+    # Complaint 1: Water issue as guest
+    s1 = _chat_step(client, "Raise a complaint")
+    sess_id = s1["sessionId"]
+    _chat_step(client, "Water", session_id=sess_id)
+    _chat_step(client, "Central Library, Ground Floor", session_id=sess_id)
+    _chat_step(
+        client,
+        "Drinking water tap is leaking continuously near the main entrance.",
+        session_id=sess_id,
+    )
+    _chat_step(client, "2525208", session_id=sess_id)
+    _chat_step(client, "Guest Student", session_id=sess_id)
+    _chat_step(client, "9876543210", session_id=sess_id)
+    _chat_step(client, "guest.student@example.com", session_id=sess_id)
+
+    c1_summary = _chat_step(client, "Submit", session_id=sess_id, action="submit", expected_status=201)
+    assert c1_summary["step"] == "done"
+    ref1 = c1_summary["complaint"]["reference"]
+    assert ref1.startswith("DSVV-GRV-")
+    # Registration suggestion shown at most once, after complaint 1
+    assert "register.html" in c1_summary["reply"]
+
+    # Complaint 2: Raise another complaint in the same session
+    s2 = _chat_step(client, "Raise another complaint", session_id=sess_id, action="new")
+    assert s2["sessionId"] != sess_id
+    sess_id_2 = s2["sessionId"]
+    assert s2["step"] == "category"
+
+    s2_lab = _chat_step(client, "Computer/Lab", session_id=sess_id_2)
+    assert s2_lab["step"] == "lab"
+
+    s2_sys = _chat_step(client, "MCA Lab", session_id=sess_id_2)
+    assert s2_sys["step"] == "systemNumber"
+
+    s2_desc = _chat_step(client, "L425", session_id=sess_id_2)
+    assert s2_desc["step"] == "description"
+
+    s2_conf_id = _chat_step(
+        client,
+        "Monitor screen is completely blank and power led blinks amber.",
+        session_id=sess_id_2,
+    )
+    # Expected: no Scholar ID, name, mobile, email questions!
+    # Only the confirmation "Wahi details use karein?"
+    assert s2_conf_id["step"] == "confirm_stored_identity"
+    assert "Wahi details use karein?" in s2_conf_id["reply"]
+    # Mobile number is masked (only last 4 digits visible)
+    assert "******3210" in s2_conf_id["reply"]
+    assert "9876543210" not in s2_conf_id["reply"]
+    assert "2525208" in s2_conf_id["reply"]
+    assert "Guest Student" in s2_conf_id["reply"]
+    assert "Haan" in s2_conf_id["quickReplies"]
+    assert "Badlein" in s2_conf_id["quickReplies"]
+
+    # Tap "Haan" -> goes straight to summary
+    s2_summary = _chat_step(client, "Haan", session_id=sess_id_2, action="yes")
+    assert s2_summary["step"] == "confirm"
+    assert "MCA Lab" in s2_summary["reply"]
+    assert "L425" in s2_summary["reply"]
+    assert "Guest Student" in s2_summary["reply"]
+    assert "2525208" in s2_summary["reply"]
+
+    # Submit complaint 2
+    c2_done = _chat_step(client, "Submit", session_id=sess_id_2, action="submit", expected_status=201)
+    assert c2_done["step"] == "done"
+    ref2 = c2_done["complaint"]["reference"]
+    assert ref2.startswith("DSVV-GRV-")
+    assert ref1 != ref2
+
+    # Registration suggestion must NOT appear again when "Raise another complaint" is used
+    assert "register.html" not in c2_done["reply"]
+
+    # Verify both complaints exist in DB with their own details and unverified indicator
+    doc1 = complaints().find_one({"id": ref1})
+    doc2 = complaints().find_one({"id": ref2})
+    assert doc1 is not None and doc2 is not None
+    assert doc1["submittedBy"]["scholarId"] == "2525208"
+    assert doc1["submittedBy"]["isVerified"] is False
+    assert doc2["submittedBy"]["scholarId"] == "2525208"
+    assert doc2["submittedBy"]["isVerified"] is False
+    assert doc2["lab"] == "MCA Lab"
+    assert doc2["systemNumber"] == "L425"
+
+
+def test_guest_badlein_at_stored_identity_confirmation_changes_field(client):
+    """'Badlein' at the stored identity confirmation lets user correct one field for complaint 2."""
+    s1 = _chat_step(client, "Raise a complaint")
+    sess_id = s1["sessionId"]
+    _chat_step(client, "Water", session_id=sess_id)
+    _chat_step(client, "Academic Block B", session_id=sess_id)
+    _chat_step(client, "Water cooler is dispensing muddy water since yesterday afternoon.", session_id=sess_id)
+    _chat_step(client, "2525208", session_id=sess_id)
+    _chat_step(client, "Guest Reporter", session_id=sess_id)
+    _chat_step(client, "9876543210", session_id=sess_id)
+    _chat_step(client, "reporter@example.com", session_id=sess_id)
+    _chat_step(client, "Submit", session_id=sess_id, action="submit", expected_status=201)
+
+    # Complaint 2
+    s2 = _chat_step(client, "Raise another complaint", session_id=sess_id, action="new")
+    sess_id_2 = s2["sessionId"]
+    _chat_step(client, "Electricity", session_id=sess_id_2)
+    _chat_step(client, "Room 301", session_id=sess_id_2)
+    conf = _chat_step(client, "Ceiling fan is sparking and making a loud grinding screech.", session_id=sess_id_2)
+    assert conf["step"] == "confirm_stored_identity"
+
+    # Tap "Badlein"
+    choose = _chat_step(client, "Badlein", session_id=sess_id_2, action="edit")
+    assert choose["step"] == "choose_identity_field"
+    assert "Mobile" in choose["quickReplies"]
+
+    # Change Mobile
+    ask_mob = _chat_step(client, "Mobile", session_id=sess_id_2)
+    assert ask_mob["step"] == "mobile"
+
+    # Provide new mobile
+    summary = _chat_step(client, "9111222333", session_id=sess_id_2)
+    assert summary["step"] == "confirm"
+    assert "******2333" in summary["reply"]
+    assert "9111222333" not in summary["reply"]
+
+    # Submit complaint 2 with new mobile
+    done = _chat_step(client, "Submit", session_id=sess_id_2, action="submit", expected_status=201)
+    assert done["step"] == "done"
+    ref = done["complaint"]["reference"]
+
+    from database import complaints
+    doc = complaints().find_one({"id": ref})
+    assert doc["submittedBy"]["mobile"] == "9111222333"
+
+
+def test_new_session_same_scholar_id_asks_all_details_without_prefill(client):
+    """In a new chat, never prefill personal details from earlier complaints. Always ask again."""
+    # Session 1
+    s1 = _chat_step(client, "Raise a complaint")
+    _chat_step(client, "Water", session_id=s1["sessionId"])
+    _chat_step(client, "Hostel 1", session_id=s1["sessionId"])
+    _chat_step(client, "Pipeline leakage outside room 101 has flooded the corridor.", session_id=s1["sessionId"])
+    _chat_step(client, "2525208", session_id=s1["sessionId"])
+    _chat_step(client, "Private Name", session_id=s1["sessionId"])
+    _chat_step(client, "9876543210", session_id=s1["sessionId"])
+    _chat_step(client, "private@example.com", session_id=s1["sessionId"])
+    _chat_step(client, "Submit", session_id=s1["sessionId"], action="submit", expected_status=201)
+
+    # Completely NEW session (no sessionId passed)
+    new_s = _chat_step(client, "Raise a complaint")
+    assert new_s["sessionId"] != s1["sessionId"]
+
+    _chat_step(client, "Electricity", session_id=new_s["sessionId"])
+    _chat_step(client, "Hostel 2", session_id=new_s["sessionId"])
+    _chat_step(client, "Main switch board is completely dead with burning smell.", session_id=new_s["sessionId"])
+
+    # Provide same Scholar ID in new session
+    ask_name = _chat_step(client, "2525208", session_id=new_s["sessionId"])
+    # MUST ask Name from scratch!
+    assert ask_name["step"] == "name"
+    # MUST NOT show previously stored personal data in reply
+    assert "Private Name" not in ask_name["reply"]
+    assert "9876543210" not in ask_name["reply"]
+    assert "private@example.com" not in ask_name["reply"]
+
+
+def test_done_clears_stored_identity(client):
+    """Tapping 'Done' clears the stored identity from the session."""
+    from database import chatbot_sessions
+
+    s1 = _chat_step(client, "Raise a complaint")
+    sess_id = s1["sessionId"]
+    _chat_step(client, "Water", session_id=sess_id)
+    _chat_step(client, "Hostel 1", session_id=sess_id)
+    _chat_step(client, "Pipeline leakage outside room 101 has flooded the corridor.", session_id=sess_id)
+    _chat_step(client, "2525208", session_id=sess_id)
+    _chat_step(client, "Guest Student", session_id=sess_id)
+    _chat_step(client, "9876543210", session_id=sess_id)
+    _chat_step(client, "guest@example.com", session_id=sess_id)
+    _chat_step(client, "Submit", session_id=sess_id, action="submit", expected_status=201)
+
+    # Verify stored_identity is present before Done
+    session_doc = chatbot_sessions().find_one({"sessionId": sess_id})
+    assert session_doc.get("stored_identity") is not None
+
+    # Tap "Done"
+    done_res = _chat_step(client, "Done", session_id=sess_id, action="done")
+    assert done_res["step"] == "idle"
+
+    # Verify stored_identity is cleared
+    session_doc_after = chatbot_sessions().find_one({"sessionId": sess_id})
+    assert session_doc_after.get("stored_identity") is None
+
+
+def test_fresh_chat_raise_complaint_on_completed_session_does_not_prefill(client):
+    """Clicking 'Raise a complaint' on a finished session starts fresh without stored identity."""
+    s1 = _chat_step(client, "Raise a complaint")
+    sess_id = s1["sessionId"]
+    _chat_step(client, "Water", session_id=sess_id)
+    _chat_step(client, "Hostel 1", session_id=sess_id)
+    _chat_step(client, "Pipeline leakage outside room 101 has flooded the corridor.", session_id=sess_id)
+    _chat_step(client, "2525208", session_id=sess_id)
+    _chat_step(client, "Amit Kumar", session_id=sess_id)
+    _chat_step(client, "9876544855", session_id=sess_id)
+    _chat_step(client, "amit.kumar@example.com", session_id=sess_id)
+    c1 = _chat_step(client, "Submit", session_id=sess_id, action="submit", expected_status=201)
+    assert c1["step"] == "done"
+
+    # User starts a fresh complaint using 'Raise a complaint' starter
+    fresh = _chat_step(client, "Raise a complaint", session_id=sess_id, action="raise_complaint")
+    assert fresh["sessionId"] != sess_id
+    fresh_sess = fresh["sessionId"]
+    assert fresh["step"] == "category"
+
+    _chat_step(client, "Electricity", session_id=fresh_sess)
+    _chat_step(client, "Academic Block A, Floor 2", session_id=fresh_sess)
+    step4 = _chat_step(
+        client,
+        "Switchboard is burnt and producing smoke continuously.",
+        session_id=fresh_sess,
+    )
+    # MUST ask for Scholar ID, NOT 'Wahi details use karein?'
+    assert step4["step"] == "scholarId"
+    assert "Wahi details use karein?" not in step4["reply"]
+    assert "Amit Kumar" not in step4["reply"]
+    assert "4855" not in step4["reply"]
+
+
+def test_step_progress_counter_never_changes_after_category_selection(client):
+    """Total steps in [Step X of Y] never changes after category selection, and confirm is [Step Y of Y]."""
+    import re
+
+    pattern = re.compile(r"\[(?:Step|चरण)\s*(\d+)(?:\s*of\s*|/)(\d+)\]")
+
+    # Flow 1: Water (General campus category)
+    s1 = _chat_step(client, "Raise a complaint")
+    m1 = pattern.search(s1["reply"])
+    assert m1 is not None
+
+    s2 = _chat_step(client, "Water", session_id=s1["sessionId"])
+    m2 = pattern.search(s2["reply"])
+    assert m2 is not None
+    total_expected = int(m2.group(2))
+
+    s3 = _chat_step(client, "Academic Block A", session_id=s1["sessionId"])
+    m3 = pattern.search(s3["reply"])
+    assert m3 is not None
+    assert int(m3.group(2)) == total_expected
+    assert int(m3.group(1)) == 3
+
+    s4 = _chat_step(
+        client,
+        "Water cooler pipe is broken and water is overflowing continuously.",
+        session_id=s1["sessionId"],
+    )
+    m4 = pattern.search(s4["reply"])
+    assert m4 is not None
+    assert int(m4.group(2)) == total_expected
+    assert int(m4.group(1)) == 4
+
+    s5 = _chat_step(client, "2525208", session_id=s1["sessionId"])
+    m5 = pattern.search(s5["reply"])
+    assert m5 is not None
+    assert int(m5.group(2)) == total_expected
+    assert int(m5.group(1)) == 5
+
+    s6 = _chat_step(client, "Ravi Verma", session_id=s1["sessionId"])
+    m6 = pattern.search(s6["reply"])
+    assert m6 is not None
+    assert int(m6.group(2)) == total_expected
+    assert int(m6.group(1)) == 6
+
+    s7 = _chat_step(client, "9876543210", session_id=s1["sessionId"])
+    m7 = pattern.search(s7["reply"])
+    assert m7 is not None
+    assert int(m7.group(2)) == total_expected
+    assert int(m7.group(1)) == 7
+
+    s8 = _chat_step(client, "ravi@example.com", session_id=s1["sessionId"])
+    m8 = pattern.search(s8["reply"])
+    assert m8 is not None
+    assert int(m8.group(2)) == total_expected
+    # Confirm step is ALWAYS [Step Y of Y]
+    assert int(m8.group(1)) == total_expected
+    assert s8["step"] == "confirm"
+
+    # Flow 2: Computer/Lab (expands to lab and systemNumber)
+    c1 = _chat_step(client, "Raise a complaint")
+    c2 = _chat_step(client, "Computer/Lab", session_id=c1["sessionId"])
+    mc2 = pattern.search(c2["reply"])
+    assert mc2 is not None
+    lab_total = int(mc2.group(2))
+    assert lab_total == 9
+
+    c3 = _chat_step(client, "MCA Lab", session_id=c1["sessionId"])
+    mc3 = pattern.search(c3["reply"])
+    assert mc3 is not None
+    assert int(mc3.group(2)) == lab_total
+    assert int(mc3.group(1)) == 3
+
+    c4 = _chat_step(client, "Workstation 12", session_id=c1["sessionId"])
+    mc4 = pattern.search(c4["reply"])
+    assert mc4 is not None
+    assert int(mc4.group(2)) == lab_total
+    assert int(mc4.group(1)) == 4
+
+    c5 = _chat_step(
+        client,
+        "System boots to recovery screen and keyboard is completely unresponsive.",
+        session_id=c1["sessionId"],
+    )
+    mc5 = pattern.search(c5["reply"])
+    assert mc5 is not None
+    assert int(mc5.group(2)) == lab_total
+    assert int(mc5.group(1)) == 5
+
+    c6 = _chat_step(client, "2525208", session_id=c1["sessionId"])
+    mc6 = pattern.search(c6["reply"])
+    assert mc6 is not None
+    assert int(mc6.group(2)) == lab_total
+    assert int(mc6.group(1)) == 6
+
+    c7 = _chat_step(client, "Ravi Verma", session_id=c1["sessionId"])
+    mc7 = pattern.search(c7["reply"])
+    assert mc7 is not None
+    assert int(mc7.group(2)) == lab_total
+    assert int(mc7.group(1)) == 7
+
+    c8 = _chat_step(client, "9876543210", session_id=c1["sessionId"])
+    mc8 = pattern.search(c8["reply"])
+    assert mc8 is not None
+    assert int(mc8.group(2)) == lab_total
+    assert int(mc8.group(1)) == 8
+
+    c9 = _chat_step(client, "ravi@example.com", session_id=c1["sessionId"])
+    mc9 = pattern.search(c9["reply"])
+    assert mc9 is not None
+    assert int(mc9.group(2)) == lab_total
+    # Confirm step is ALWAYS [Step 9 of 9]
+    assert int(mc9.group(1)) == 9
+    assert c9["step"] == "confirm"
 

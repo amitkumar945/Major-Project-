@@ -403,21 +403,20 @@ def save_session(session: dict) -> None:
 def _finish_session(session: dict, complaint: dict, language: str = "en") -> dict:
     now = utcnow()
     reference = complaint.get("id") or complaint.get("reference")
-    chatbot_sessions().update_one(
-        {"sessionId": session["sessionId"]},
-        {"$set": {
-            "reference": reference,
-            "complaintId": reference,
-            "department": complaint.get("department"),
-            "priority": complaint.get("priority"),
-            "complaintStatus": complaint.get("status"),
-            "state": STATE_COMPLETED,
-            "step": "done",
-            "updatedAt": now,
-            "expiresAt": now + timedelta(minutes=SESSION_TTL_MINUTES),
-        }},
-    )
-    session.update({
+    draft = session.get("draft") or {}
+
+    stored_id = session.get("stored_identity")
+    if not stored_id and (draft.get("scholarId") or draft.get("name")):
+        stored_id = {
+            "scholarId": draft.get("scholarId", ""),
+            "name": draft.get("name", ""),
+            "mobile": draft.get("mobile", ""),
+            "email": draft.get("email", ""),
+            "submitterType": "registered" if (session.get("userId") or draft.get("isRegistered")) else "guest",
+            "identityVerified": bool(draft.get("isRegistered") and session.get("userId")),
+        }
+
+    update_fields = {
         "reference": reference,
         "complaintId": reference,
         "department": complaint.get("department"),
@@ -425,8 +424,18 @@ def _finish_session(session: dict, complaint: dict, language: str = "en") -> dic
         "complaintStatus": complaint.get("status"),
         "state": STATE_COMPLETED,
         "step": "done",
-    })
-    return _done_response(session, complaint, language=language)
+        "updatedAt": now,
+        "expiresAt": now + timedelta(minutes=SESSION_TTL_MINUTES),
+    }
+    if stored_id:
+        update_fields["stored_identity"] = stored_id
+
+    chatbot_sessions().update_one(
+        {"sessionId": session["sessionId"]},
+        {"$set": update_fields},
+    )
+    session.update(update_fields)
+    return _done_response(session, complaint, newly_created=True, language=language)
 
 
 def _done_response(
@@ -464,6 +473,28 @@ def _done_response(
             f"Assigned department: {department or 'being reviewed'}."
         )
         quick_replies = ["Track this complaint", "Raise another complaint", "Done"]
+
+    # Registration suggestion: shown at most once per session for guest submissions
+    reg_suggestion = ""
+    is_registered_user = bool(
+        session.get("userId")
+        or (complaint or {}).get("submittedBy", {}).get("type") == "registered"
+    )
+    if newly_created and not is_registered_user:
+        if not session.get("registration_suggested"):
+            session["registration_suggested"] = True
+            chatbot_sessions().update_one(
+                {"sessionId": session["sessionId"]},
+                {"$set": {"registration_suggested": True}},
+            )
+            if language == "hi":
+                reg_suggestion = "\n\n(सुझाव: रजिस्टर करने पर अगली बार विवरण अपने आप आ जाएंगे: /register.html)"
+            elif language == "hinglish":
+                reg_suggestion = "\n\n(Suggestion: Register karne par agli baar details apne aap aa jayengi: /register.html)"
+            else:
+                reg_suggestion = "\n\n(Tip: Registering an account will auto-fill your details next time: /register.html)"
+
+    reply = reply + reg_suggestion
 
     return {
         "reply": reply,
@@ -534,6 +565,21 @@ def _problem_report_intent(text: str) -> bool:
     return any(marker in lower for marker in markers)
 
 
+def _mask_mobile(mobile: str) -> str:
+    cleaned = re.sub(r"\D", "", mobile or "")
+    if len(cleaned) >= 4:
+        return "******" + cleaned[-4:]
+    return "******"
+
+
+def _mask_email(email: str) -> str:
+    if not email or "@" not in email:
+        return "******"
+    user_part, domain = email.split("@", 1)
+    prefix = user_part[0] if user_part else ""
+    return f"{prefix}***@{domain}"
+
+
 # ---------------------------------------------------------- Slot determination (Single source of truth)
 
 
@@ -547,23 +593,33 @@ def get_flow_steps(draft: dict, user: dict = None, config: dict = None) -> list[
         steps.append("location")
     steps.append("description")
 
-    ask_identity = config.get("CHATBOT_ASK_IDENTITY", True) if config else True
-    if ask_identity:
-        steps.append("scholarId")
-        if user and user.get("id"):
-            acc_mob = (user.get("mobile") or "").strip()
-            if not is_mobile(acc_mob):
-                steps.append("mobile")
-            steps.append("confirm_identity")
-        else:
-            steps.extend(["name", "mobile", "email"])
+    if draft.get("stored_identity") and draft["stored_identity"].get("scholarId"):
+        steps.append("confirm_stored_identity")
     else:
-        if not user:
+        ask_identity = config.get("CHATBOT_ASK_IDENTITY", True) if config else True
+        if ask_identity:
             steps.append("scholarId")
-            if draft.get("isRegistered") is False:
+            if user and user.get("id"):
+                acc_mob = (user.get("mobile") or "").strip()
+                if not is_mobile(acc_mob):
+                    steps.append("mobile")
+                steps.append("confirm_identity")
+            else:
                 steps.extend(["name", "mobile", "email"])
+        else:
+            if not user:
+                steps.append("scholarId")
+                if draft.get("isRegistered") is False:
+                    steps.extend(["name", "mobile", "email"])
 
     steps.append("confirm")
+    return steps
+
+
+def update_draft_flow_steps(draft: dict, user: dict = None, config: dict = None) -> list[str]:
+    steps = get_flow_steps(draft, user, config)
+    draft["flow_steps"] = steps
+    draft["total_steps"] = len(steps)
     return steps
 
 
@@ -581,6 +637,8 @@ def get_first_missing_slot(draft: dict, user: dict = None, config: dict = None) 
             return "location"
         if step == "description" and len((draft.get("description") or "").strip()) < 25:
             return "description"
+        if step == "confirm_stored_identity" and not draft.get("storedIdentityConfirmed"):
+            return "confirm_stored_identity"
         if step == "scholarId" and not draft.get("scholarId"):
             return "scholarId"
         if step == "name" and len((draft.get("name") or "").strip()) < 3:
@@ -597,8 +655,15 @@ def get_first_missing_slot(draft: dict, user: dict = None, config: dict = None) 
 
 
 def get_step_progress(step: str, draft: dict, user: dict = None, config: dict = None) -> tuple[int, int]:
-    steps = get_flow_steps(draft, user, config)
-    total = len(steps)
+    total = draft.get("total_steps")
+    steps = draft.get("flow_steps")
+    if not total or not steps:
+        steps = update_draft_flow_steps(draft, user, config)
+        total = len(steps)
+
+    if step == "confirm":
+        return total, total
+
     try:
         idx = steps.index(step) + 1
     except ValueError:
@@ -684,6 +749,22 @@ def prompt_for_slot(
             reply = f"{p_hdr}Please describe the problem in detail (minimum 25 characters):"
         return reply, [back_btn, cancel_btn]
 
+    if slot == "confirm_stored_identity":
+        stored = draft.get("stored_identity") or {}
+        name = stored.get("name", "")
+        masked_mob = _mask_mobile(stored.get("mobile", ""))
+        scholar_id = stored.get("scholarId", "")
+        if language == "hi":
+            reply = f"{p_hdr}वही विवरण इस्तेमाल करें?\n• नाम: {name}\n• मोबाइल: {masked_mob}\n• स्कॉलर आईडी: {scholar_id}"
+            buttons = ["हाँ", "बदलें", cancel_btn]
+        elif language == "hinglish":
+            reply = f"{p_hdr}Wahi details use karein?\n• Name: {name}\n• Mobile: {masked_mob}\n• Scholar ID: {scholar_id}"
+            buttons = ["Haan", "Badlein", cancel_btn]
+        else:
+            reply = f"{p_hdr}Wahi details use karein?\n• Name: {name}\n• Mobile: {masked_mob}\n• Scholar ID: {scholar_id}"
+            buttons = ["Haan", "Badlein", cancel_btn]
+        return reply, buttons
+
     if slot == "scholarId":
         if language == "hi":
             reply = f"{p_hdr}कृपया अपना स्कॉलर आईडी / छात्र आईडी दर्ज करें (उदाहरण: MCA/2024/018):"
@@ -695,8 +776,8 @@ def prompt_for_slot(
 
     if slot == "confirm_identity":
         name = draft.get("name", "")
-        mobile = draft.get("mobile", "")
-        email = draft.get("email", "")
+        mobile = _mask_mobile(draft.get("mobile", ""))
+        email = _mask_email(draft.get("email", ""))
         if language == "hi":
             reply = f"{p_hdr}ये विवरण सही हैं?\n• नाम: {name}\n• मोबाइल: {mobile}\n• ईमेल: {email}"
             buttons = ["हाँ, विवरण सही है", "विवरण बदलें", cancel_btn]
@@ -744,8 +825,8 @@ def prompt_for_slot(
         )
         scholar_id = draft.get("scholarId", "")
         name = draft.get("name", "")
-        mobile = draft.get("mobile", "")
-        email = draft.get("email", "")
+        mobile = _mask_mobile(draft.get("mobile", ""))
+        email = _mask_email(draft.get("email", ""))
 
         if language == "hi":
             summary = (
@@ -847,30 +928,83 @@ def handle_chat_message(
 
     # 1. Immutable submitted session check
     if state == STATE_COMPLETED and not _status_intent(message_text):
+        if action_val == "done" or message_text.strip().lower() in ("done", "पूर्ण", "finish"):
+            session["stored_identity"] = None
+            session["draft"] = {}
+            session["state"] = STATE_IDLE
+            session["step"] = "idle"
+            save_session(session)
+            done_replies = {
+                "hi": "धन्यवाद! यदि आपको और सहायता की आवश्यकता हो, तो मुझे बताएं।",
+                "hinglish": "Dhanyawaad! Agar aur koi help chahiye toh batayein.",
+                "en": "Thank you! Let me know if you need any further assistance.",
+            }
+            starter_replies = ["Raise a complaint", "Track a complaint", "Help & FAQs"]
+            return {
+                "reply": done_replies[language],
+                "sessionId": session["sessionId"],
+                "step": "idle",
+                "method": "complaint_flow",
+                "quickReplies": starter_replies,
+            }
+
         starts_another = (
-            action_val in ("new", "raise_complaint")
+            action_val == "new"
             or "raise another" in message_text.lower()
             or "another complaint" in message_text.lower()
-            or "raise a complaint" in message_text.lower()
-            or "शिकायत दर्ज करें" in message_text.lower()
+            or "दूसरी शिकायत" in message_text.lower()
         )
         if starts_another:
-            session, _ = get_or_create_session(None, user)
-            session["preferredLanguage"] = language
-            session["draft"] = {}
-            session["step_history"] = []
-            session["invalid_attempts"] = 0
-            session["state"] = STATE_COLLECTING
-            session["step"] = "category"
-            save_session(session)
-            prompt, quick_replies = prompt_for_slot("category", session["draft"], language, user, config)
+            stored_id = session.get("stored_identity")
+            new_session, _ = get_or_create_session(None, user)
+            new_draft = {}
+            if stored_id and stored_id.get("scholarId"):
+                new_session["stored_identity"] = stored_id
+                new_draft["stored_identity"] = stored_id
+
+            update_draft_flow_steps(new_draft, user, config)
+            new_session["registration_suggested"] = True
+            new_session["preferredLanguage"] = language
+            new_session["draft"] = new_draft
+            new_session["step_history"] = []
+            new_session["invalid_attempts"] = 0
+            new_session["state"] = STATE_COLLECTING
+            new_session["step"] = "category"
+            save_session(new_session)
+            prompt, quick_replies = prompt_for_slot("category", new_draft, language, user, config)
             return {
                 "reply": prompt,
-                "sessionId": session["sessionId"],
+                "sessionId": new_session["sessionId"],
                 "step": "category",
                 "method": "complaint_flow",
                 "quickReplies": quick_replies,
-                "draft": session["draft"],
+                "draft": new_draft,
+            }
+
+        starts_fresh = (
+            action_val == "raise_complaint"
+            or "raise a complaint" in message_text.lower()
+            or "शिकायत दर्ज करें" in message_text.lower()
+        )
+        if starts_fresh:
+            new_session, _ = get_or_create_session(None, user)
+            new_draft = {}
+            update_draft_flow_steps(new_draft, user, config)
+            new_session["preferredLanguage"] = language
+            new_session["draft"] = new_draft
+            new_session["step_history"] = []
+            new_session["invalid_attempts"] = 0
+            new_session["state"] = STATE_COLLECTING
+            new_session["step"] = "category"
+            save_session(new_session)
+            prompt, quick_replies = prompt_for_slot("category", new_draft, language, user, config)
+            return {
+                "reply": prompt,
+                "sessionId": new_session["sessionId"],
+                "step": "category",
+                "method": "complaint_flow",
+                "quickReplies": quick_replies,
+                "draft": new_draft,
             }
         return _done_response(session, language=language)
 
@@ -1152,6 +1286,7 @@ def handle_chat_message(
             or message_text.lower() in ("confirm", "haan", "ha", "हाँ", "sahi", "theek")
         ):
             draft["category"] = proposed
+            update_draft_flow_steps(draft, user, config)
             session["step_history"] = ["category"]
             session["state"] = STATE_COLLECTING
             session["invalid_attempts"] = 0
@@ -1209,6 +1344,7 @@ def handle_chat_message(
             draft.pop("lab", None)
             draft.pop("systemNumber", None)
             draft.pop("location", None)
+            update_draft_flow_steps(draft, user, config)
             session["state"] = STATE_COLLECTING
             session["step"] = "category"
             session["invalid_attempts"] = 0
@@ -1348,8 +1484,11 @@ def handle_chat_message(
                             "quickReplies": ["Submit", "Cancel"],
                         }
 
+            seq = session.get("complaint_sequence", 1)
+            current_idempotency_key = session["sessionId"] if seq == 1 else f"{session['sessionId']}_{seq}"
+
             existing = complaints().find_one(
-                {"_chatbotSessionId": session["sessionId"]}, {"_id": 0}
+                {"_chatbotSessionId": current_idempotency_key}, {"_id": 0}
             )
             if existing:
                 return _finish_session(session, existing, language)
@@ -1383,13 +1522,13 @@ def handle_chat_message(
                 created = complaint_service.create_complaint(
                     payload,
                     user=user,
-                    idempotency_key=session["sessionId"],
+                    idempotency_key=current_idempotency_key,
                 )
                 if not created or not created.get("id"):
                     raise RuntimeError("Complaint creation returned no reference.")
             except DuplicateKeyError:
                 created = complaints().find_one(
-                    {"_chatbotSessionId": session["sessionId"]}, {"_id": 0}
+                    {"_chatbotSessionId": current_idempotency_key}, {"_id": 0}
                 )
                 if not created:
                     _release_submission(session)
@@ -1407,8 +1546,7 @@ def handle_chat_message(
                 )
             except Exception:
                 logger.exception("Failed to notify administrators for complaint %s", created["id"])
-            _finish_session(session, created, language)
-            return _done_response(session, created, newly_created=True, language=language)
+            return _finish_session(session, created, language)
 
         elif action_val == "edit" or message_text.lower() in ("edit", "change", "modify", "बदलें"):
             session["state"] = STATE_EDITING
@@ -1602,6 +1740,7 @@ def handle_chat_message(
                     "draft": draft,
                 }
             draft["category"] = matched
+            update_draft_flow_steps(draft, user, config)
             session["step_history"].append("category")
             session["invalid_attempts"] = 0
 
@@ -1694,6 +1833,75 @@ def handle_chat_message(
             session["step_history"].append("description")
             session["invalid_attempts"] = 0
 
+        elif current_step == "confirm_stored_identity":
+            low = message_text.strip().lower()
+            stored = draft.get("stored_identity") or session.get("stored_identity") or {}
+            if (
+                action_val in ("yes", "haan", "confirm")
+                or any(w in low for w in ("haan", "yes", "sahi", "theek", "confirm", "ok", "correct", "हाँ", "use same", "wahi"))
+            ):
+                draft["scholarId"] = stored.get("scholarId", "")
+                draft["name"] = stored.get("name", "")
+                draft["mobile"] = stored.get("mobile", "")
+                draft["email"] = stored.get("email", "")
+                draft["submitterType"] = stored.get("submitterType", "guest")
+                draft["identityVerified"] = stored.get("identityVerified", False)
+                draft["isRegistered"] = stored.get("submitterType") == "registered"
+                draft["identityConfirmed"] = True
+                draft["storedIdentityConfirmed"] = True
+                session["step_history"].append("confirm_stored_identity")
+                session["invalid_attempts"] = 0
+            elif (
+                action_val in ("edit", "badlein")
+                or any(w in low for w in ("badlein", "change", "edit", "badal", "modify", "बदलें"))
+            ):
+                draft["scholarId"] = stored.get("scholarId", "")
+                draft["name"] = stored.get("name", "")
+                draft["mobile"] = stored.get("mobile", "")
+                draft["email"] = stored.get("email", "")
+                draft["submitterType"] = stored.get("submitterType", "guest")
+                draft["identityVerified"] = stored.get("identityVerified", False)
+                draft["isRegistered"] = stored.get("submitterType") == "registered"
+                draft["storedIdentityConfirmed"] = True
+                session["step"] = "choose_identity_field"
+                session["step_history"].append("confirm_stored_identity")
+                session["invalid_attempts"] = 0
+                save_session(session)
+                choose_text = {
+                    "hi": "कौन सा विवरण बदलना चाहते हैं?",
+                    "hinglish": "Kaunsi detail badalna chahte hain?",
+                    "en": "Which detail would you like to change for this complaint?",
+                }[language]
+                choose_buttons = {
+                    "hi": ["नाम", "मोबाइल", "ईमेल", "स्कॉलर आईडी", "रद्द करें"],
+                    "hinglish": ["Name", "Mobile", "Email", "Scholar ID", "Cancel"],
+                    "en": ["Name", "Mobile", "Email", "Scholar ID", "Cancel"],
+                }[language]
+                return {
+                    "reply": choose_text,
+                    "sessionId": session["sessionId"],
+                    "step": "choose_identity_field",
+                    "method": "complaint_flow",
+                    "quickReplies": choose_buttons,
+                    "draft": draft,
+                }
+            else:
+                attempts = session.get("invalid_attempts", 0) + 1
+                session["invalid_attempts"] = attempts
+                save_session(session)
+                if attempts >= 3:
+                    btns = ["Help", "Cancel", "Back"]
+                    return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "confirm_stored_identity", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
+                prompt, qr = prompt_for_slot("confirm_stored_identity", draft, language, user, config)
+                return {
+                    "reply": prompt,
+                    "sessionId": session["sessionId"],
+                    "step": "confirm_stored_identity",
+                    "method": "complaint_flow",
+                    "quickReplies": qr,
+                    "draft": draft,
+                }
+
         elif current_step == "scholarId":
             val = message_text.strip()
             if len(val) < 3 or len(val) > 40:
@@ -1714,19 +1922,15 @@ def handle_chat_message(
 
             # Check if user is logged in
             if user and user.get("id"):
-                expected_ids = {
-                    (user.get("userId") or "").strip().lower(),
-                    (user.get("scholarId") or "").strip().lower(),
-                    (user.get("id") or "").strip().lower(),
-                } - {""}
-                if val.lower() not in expected_ids:
+                expected_scholar_id = (user.get("scholarId") or user.get("userId") or "").strip().lower()
+                if val.strip().lower() != expected_scholar_id:
                     attempts = session.get("invalid_attempts", 0) + 1
                     session["invalid_attempts"] = attempts
                     save_session(session)
                     if attempts >= 3:
                         btns = ["Help", "Cancel", "Back"]
                         return {"reply": "Would you like Help or do you want to Cancel?", "sessionId": session["sessionId"], "step": "scholarId", "method": "complaint_flow", "quickReplies": btns, "draft": draft}
-                    acc_label = user.get("userId") or user.get("id")
+                    acc_label = user.get("scholarId") or user.get("userId") or ""
                     mismatch_replies = {
                         "hi": f"स्कॉलर आईडी '{val}' आपके लॉग-इन खाते ({acc_label}) से मेल नहीं खाता। कृपया अपना स्कॉलर आईडी दर्ज करें:",
                         "hinglish": f"Scholar ID '{val}' aapke logged-in account ({acc_label}) se match nahi karta. Kripya apna Scholar ID enter karein:",
@@ -1741,7 +1945,7 @@ def handle_chat_message(
                         "draft": draft,
                     }
                 # Matches logged-in account
-                draft["scholarId"] = user.get("userId") or user.get("id") or val
+                draft["scholarId"] = user.get("scholarId") or user.get("userId") or val
                 draft["isRegistered"] = True
                 draft["name"] = user.get("name", "")
                 draft["email"] = user.get("email", "")
@@ -1837,6 +2041,14 @@ def handle_chat_message(
                 save_session(session)
                 prompt, qr = prompt_for_slot("email", draft, language, user, config)
                 return {"reply": prompt, "sessionId": session["sessionId"], "step": "email", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
+            elif "scholar" in low or "स्कॉलर" in low or "student id" in low or low == "id":
+                draft.pop("scholarId", None)
+                draft.pop("identityConfirmed", None)
+                session["step"] = "scholarId"
+                session["invalid_attempts"] = 0
+                save_session(session)
+                prompt, qr = prompt_for_slot("scholarId", draft, language, user, config)
+                return {"reply": prompt, "sessionId": session["sessionId"], "step": "scholarId", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
             else:
                 prompt, qr = prompt_for_slot("confirm_identity", draft, language, user, config)
                 return {"reply": prompt, "sessionId": session["sessionId"], "step": "confirm_identity", "method": "complaint_flow", "quickReplies": qr, "draft": draft}
@@ -1859,6 +2071,8 @@ def handle_chat_message(
                     "draft": draft,
                 }
             draft["name"] = val
+            if draft.get("stored_identity"):
+                draft["stored_identity"]["name"] = val
             session["step_history"].append("name")
             session["invalid_attempts"] = 0
 
@@ -1902,6 +2116,8 @@ def handle_chat_message(
                 }
             clean_digits = re.sub(r"\D", "", val)[-10:]
             draft["mobile"] = clean_digits
+            if draft.get("stored_identity"):
+                draft["stored_identity"]["mobile"] = clean_digits
             session["step_history"].append("mobile")
             session["invalid_attempts"] = 0
 
@@ -1923,6 +2139,8 @@ def handle_chat_message(
                     "draft": draft,
                 }
             draft["email"] = val
+            if draft.get("stored_identity"):
+                draft["stored_identity"]["email"] = val
             session["step_history"].append("email")
             session["invalid_attempts"] = 0
 
@@ -1966,6 +2184,7 @@ def handle_chat_message(
 
     if is_complaint_intent:
         session["draft"] = {}
+        update_draft_flow_steps(session["draft"], user, config)
         session["step_history"] = []
         session["invalid_attempts"] = 0
         session["state"] = STATE_COLLECTING
@@ -2030,6 +2249,7 @@ def handle_chat_message(
             }
         session["state"] = STATE_COLLECTING
         session["step"] = "category"
+        update_draft_flow_steps(session["draft"], user, config)
         save_session(session)
         start_replies = {
             "hi": "मैं शिकायत दर्ज करने में मदद कर सकता हूँ। कृपया category चुनें:",
