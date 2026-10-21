@@ -10,8 +10,12 @@ const STARTER_REPLIES = [
 ]
 const SESSION_STORAGE_KEY = 'dsvv_chatbot_session'
 const HINGLISH_MARKERS = new Set([
-  'ab', 'apni', 'batao', 'chahiye', 'ka', 'kar', 'kaise', 'karo', 'karu',
-  'kya', 'meri', 'mujhe', 'pani', 'paani', 'shikayat', 'hai', 'hain', 'iska',
+  'ab', 'abhi', 'aap', 'aapka', 'aapki', 'apko', 'apni', 'batao', 'bataiye', 'bhi',
+  'chahiye', 'darj', 'hai', 'hain', 'hum', 'iska', 'ka', 'kaha', 'kahan', 'kaam',
+  'kaise', 'kar', 'karein', 'karen', 'karo', 'karu', 'karna', 'kijiye', 'kr', 'krna',
+  'kyun', 'kya', 'mera', 'meri', 'mere', 'mujhe', 'nahi', 'nahin', 'nhi', 'nai',
+  'pani', 'paani', 'raha', 'rahe', 'rahi', 'samasya',
+  'shikayat', 'vibhag',
 ])
 
 let mounted = false
@@ -43,7 +47,7 @@ export function mountChatbot() {
         <button class="dsvv-chat__mic" type="button" data-chat-mic aria-label="Speak your message" title="Speak your message">🎙</button>
         <button type="submit" aria-label="Send message">➤</button>
       </form>
-      <p class="dsvv-chat__note" data-chat-voice-status aria-live="polite">Never share passwords, OTPs, or tokens here.</p>
+      <p class="dsvv-chat__note" data-chat-voice-status aria-live="polite">General questions may be sent to the configured AI provider. Do not share passwords, OTPs, complaint references, or personal details.</p>
     </section>`
   document.body.append(host)
 
@@ -70,20 +74,15 @@ export function mountChatbot() {
   let speechRepliesEnabled = false
   let preferredLanguage = navigator.language?.toLowerCase().startsWith('hi') ? 'hi' : 'en'
   let busy = false
-  let sessionId = ''
-  try {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY)
-  } catch {
-    // Ignore storage errors in restricted contexts
-  }
+  let sessionId = readSessionId()
 
   if (!speechSupported) {
     micButton.disabled = true
     micButton.title = 'Speech recognition is not supported in this browser'
     micButton.setAttribute('aria-label', 'Speech recognition is not supported in this browser')
-    voiceStatus.textContent = 'Voice input is not supported in this browser. You can still type your message.'
+    voiceStatus.textContent = 'Voice input is not supported in this browser. You can still type. General questions may be sent to the configured AI provider; do not share personal details.'
   } else {
-    voiceStatus.textContent = "Voice recognition may use your browser's speech service. Never share passwords, OTPs, or tokens."
+    voiceStatus.textContent = "Voice recognition may use your browser's speech service. General questions may be sent to the configured AI provider; do not share passwords, OTPs, complaint references, or personal details."
   }
   if (!speechOutputSupported) {
     speechButton.disabled = true
@@ -126,6 +125,7 @@ export function mountChatbot() {
   function startListening() {
     if (!speechSupported || busy || listening) return
     try {
+      if (speechSynthesis) speechSynthesis.cancel()
       recognition = new SpeechRecognition()
       recognition.lang = speechLocale(input.value)
       recognition.continuous = false
@@ -157,8 +157,9 @@ export function mountChatbot() {
         const transcript = finalTranscript.trim()
         if (transcript) {
           preferredLanguage = languageStyle(transcript)
-          voiceStatus.textContent = ''
-          send(transcript)
+          input.value = transcript
+          voiceStatus.textContent = 'Transcript ready. Review it, then press Send.'
+          input.focus()
         }
       }
       recognition.start()
@@ -279,13 +280,22 @@ export function mountChatbot() {
     }
     item.append(meta)
 
-    if (options.action?.href?.startsWith('/') && !options.action.href.startsWith('//') && options.action.label) {
-      const link = document.createElement('a')
-      link.className = 'dsvv-chat__action'
-      link.href = options.action.href
-      link.textContent = options.action.label
-      item.append(link)
-    }
+    const actionItems = Array.isArray(options.actions) && options.actions.length
+      ? options.actions
+      : (options.action ? [options.action] : [])
+    actionItems.forEach((act) => {
+      if (act?.href?.startsWith('/') && !act.href.startsWith('//') && act.label) {
+        const link = document.createElement('a')
+        link.className = 'dsvv-chat__action'
+        link.href = act.href
+        link.textContent = act.label
+        if (act.target === '_blank') {
+          link.target = '_blank'
+          link.rel = 'noopener noreferrer'
+        }
+        item.append(link)
+      }
+    })
     if (options.complaint?.timeline?.length) {
       const history = document.createElement('ul')
       history.className = 'dsvv-chat__timeline'
@@ -337,14 +347,6 @@ export function mountChatbot() {
           throw new Error('The complaint could not be confirmed. Please retry to check its status.')
         }
       }
-      if (data.step === 'idle') {
-        sessionId = ''
-        try {
-          sessionStorage.removeItem(SESSION_STORAGE_KEY)
-        } catch {
-          // ignore
-        }
-      }
       addMessage(data.reply, 'assistant', data)
       if (showUser) preferredLanguage = languageStyle(question)
       speak(data.reply)
@@ -373,12 +375,6 @@ export function mountChatbot() {
     panel.hidden = true
     launcher.setAttribute('aria-expanded', 'false')
     launcher.focus()
-    sessionId = ''
-    try {
-      sessionStorage.removeItem(SESSION_STORAGE_KEY)
-    } catch {
-      // ignore
-    }
     messages.replaceChildren()
   }
 

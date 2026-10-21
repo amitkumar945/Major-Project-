@@ -136,6 +136,7 @@ urgent terms apply equally to chat and form submissions.
 | `CHATBOT_MAX_REQUEST_BYTES` | `8192` | Maximum encoded request body |
 | `RATE_LIMIT_CHATBOT` | `30` | Chat requests per client per window |
 | `CHATBOT_RATE_WINDOW` | `60` seconds | General chatbot rate-limit window |
+| `CHATBOT_SHARED_RATE_LIMIT` | `true` | Store chatbot and guest quotas in MongoDB for all workers |
 | `CHATBOT_GUEST_RATE_WINDOW` | `300` seconds | Guest submission rate-limit window |
 | `CHATBOT_GUEST_IP_LIMIT` | `15` | Guest submissions per peer IP per window |
 | `CHATBOT_GUEST_MOBILE_LIMIT` | `5` | Guest submissions per normalized mobile per window |
@@ -151,14 +152,17 @@ and do not depend on the provider. User messages and contact details are not
 written to application logs; provider history is redacted before storage or
 transmission.
 
-Rate limits use the existing in-process fixed-window counter. They reset on
-process restart and are not shared across worker processes. A multi-worker
-deployment should replace the in-memory store with a shared limiter before
-relying on the guest quotas as a global abuse control. Guest complaints do not
+Chatbot and guest-submission limits use atomic MongoDB fixed-window counters
+by default and are shared across workers. MongoDB expires old windows. If the
+counter store has a transient error, the service logs the error type and falls
+back to the process-local soft limit; other endpoint limits remain in process
+memory. Guest complaints do not
 have an account for the private “my complaints” view or account notifications;
 they can use the public reference tracker, which excludes guest contact data.
-The chat accepts text only and does not support attachments, OTP verification,
-voice, or a Flutter chat screen.
+The web chat supports browser speech recognition and spoken replies when the
+browser provides Web Speech APIs; recognized text is reviewed before sending.
+The chat does not support attachments, OTP verification, or a Flutter chat
+screen.
 
 ## Manual test script
 

@@ -201,6 +201,7 @@ class Config:
     CHATBOT_GUEST_RATE_WINDOW = _int("CHATBOT_GUEST_RATE_WINDOW", 300)
     CHATBOT_GUEST_IP_LIMIT = _int("CHATBOT_GUEST_IP_LIMIT", 15)
     CHATBOT_GUEST_MOBILE_LIMIT = _int("CHATBOT_GUEST_MOBILE_LIMIT", 5)
+    CHATBOT_SHARED_RATE_LIMIT = _bool("CHATBOT_SHARED_RATE_LIMIT", True)
     CHATBOT_ASK_IDENTITY = _bool("CHATBOT_ASK_IDENTITY", True)
 
     # Configure only the number of reverse proxies that are trusted to
@@ -269,6 +270,7 @@ class TestConfig(Config):
     OTP_DEV_MODE = True
     IS_TEST = True
     RATE_LIMIT_ENABLED = False
+    CHATBOT_SHARED_RATE_LIMIT = False
     OPENAI_API_KEY = ""
     CHATBOT_AI_API_KEY = ""
     DEBUG = False

@@ -40,11 +40,15 @@ _SCHOLAR_ID = re.compile(
 _DEVANAGARI = re.compile(r"[\u0900-\u097f]")
 _WORD = re.compile(r"[a-z]+", re.I)
 _HINGLISH_MARKERS = {
-    "ab", "apni", "batao", "btao", "bataiye", "chahiye", "ka", "kar",
-    "kaise", "karo", "karu", "karun", "kya", "ki", "maine", "meri",
-    "mujhe", "pani", "paani", "panee", "bijli", "bijlee", "shikayat", "shikaayat",
-    "shikayt", "stithi", "sthiti", "hai", "hain", "iska", "uska",
-    "haan", "han", "ha", "theek", "sahi", "badlein", "badal", "jaari", "naya",
+    "ab", "abhi", "aap", "aapka", "aapki", "apko", "apni", "batao", "btao",
+    "bataiye", "bhi", "chahiye", "darj", "hai", "hain", "hum", "iska",
+    "ka", "kaha", "kahan", "kaam", "kaise", "kar", "karein", "karen", "karo",
+    "karu", "karun", "karna", "kijiye", "kr", "krna", "kya", "kyun", "ki", "maine",
+    "mera", "meri", "mere", "mujhe", "nahi", "nahin", "pani", "paani",
+    "panee", "bijli", "bijlee", "shikayat", "shikaayat", "shikayt", "samasya",
+    "stithi", "sthiti", "hai", "hain", "hum", "iska", "uska", "haan", "han",
+    "ha", "theek", "sahi", "badlein", "badal", "jaari", "naya", "raha", "rahe",
+    "rahi", "nhi", "nai", "vibhag",
 }
 _SUBMISSION_CONFIRMATIONS = {
     "submit", "submit complaint", "yes", "yes submit", "haan", "han", "ha",
@@ -230,7 +234,9 @@ def _fallback(text: str, language: str = None) -> str:
 
 
 def _provider_answer(text: str, config, history: list = None) -> str | None:
-    api_key = config.get("OPENAI_API_KEY") or config.get("CHATBOT_AI_API_KEY", "")
+    api_key = str(
+        config.get("OPENAI_API_KEY") or config.get("CHATBOT_AI_API_KEY", "") or ""
+    ).strip()
     if not api_key:
         return None
     base_url = (
@@ -238,6 +244,7 @@ def _provider_answer(text: str, config, history: list = None) -> str | None:
         or config.get("CHATBOT_AI_BASE_URL")
         or "https://api.openai.com/v1"
     )
+    base_url = str(base_url).strip() or "https://api.openai.com/v1"
     departments = "\n".join(
         f"- {d['name']}: {d['description']} Contact: {d['email']}" for d in DEPARTMENTS
     )
@@ -303,8 +310,11 @@ def _provider_answer(text: str, config, history: list = None) -> str | None:
         with client:
             response = client.chat.completions.create(
                 model=(
-                    config.get("OPENAI_MODEL")
-                    or config.get("CHATBOT_AI_MODEL")
+                    str(
+                        config.get("OPENAI_MODEL")
+                        or config.get("CHATBOT_AI_MODEL")
+                        or "gpt-4o-mini"
+                    ).strip()
                     or "gpt-4o-mini"
                 ),
                 temperature=0.2,
@@ -511,6 +521,41 @@ def _done_response(
         },
         "quickReplies": quick_replies,
         "action": {"label": "Track complaint", "href": f"/track.html?id={reference}"},
+    }
+
+
+def _login_required_response(session: dict, language: str = "en", pending_text: str = None) -> dict:
+    """Standardized response requiring registration/login before filing or submitting complaints."""
+    if pending_text and len(pending_text.strip()) >= 8:
+        if not isinstance(session.get("draft"), dict):
+            session["draft"] = {}
+        session["draft"]["description"] = pending_text.strip()
+    session["step"] = "auth_required"
+    save_session(session)
+    replies = {
+        "hi": "शिकायत दर्ज करने से पहले कृपया अपने खाते में लॉग इन करें या रजिस्टर करें।",
+        "hinglish": "Complaint raise karne se pehle please apne account me login ya register karein.",
+        "en": "Please register or log in to your account before raising a complaint.",
+    }
+    actions = [
+        {"label": "Login" if language != "hi" else "लॉग इन", "href": "/login.html", "target": "_blank"},
+        {"label": "Register" if language != "hi" else "रजिस्टर", "href": "/register.html", "target": "_blank"},
+    ]
+    quick_replies = {
+        "hi": ["लॉग इन", "रजिस्टर", "रद्द करें"],
+        "hinglish": ["Login", "Register", "Cancel"],
+        "en": ["Login", "Register", "Cancel"],
+    }[language]
+    return {
+        "reply": replies.get(language, replies["en"]),
+        "sessionId": session["sessionId"],
+        "step": "auth_required",
+        "method": "complaint_flow",
+        "authRequired": True,
+        "action": actions[0],
+        "actions": actions,
+        "quickReplies": quick_replies,
+        "draft": session.get("draft"),
     }
 
 
@@ -823,10 +868,12 @@ def prompt_for_slot(
             if category == "Computer/Lab"
             else draft.get("location", "Campus")
         )
-        scholar_id = draft.get("scholarId", "")
-        name = draft.get("name", "")
-        mobile = _mask_mobile(draft.get("mobile", ""))
-        email = _mask_email(draft.get("email", ""))
+        scholar_id = draft.get("scholarId") or (user.get("userId") or user.get("scholarId") or "" if user else "")
+        name = draft.get("name") or (user.get("name", "") if user else "")
+        raw_mob = draft.get("mobile") or (user.get("mobile", "") if user else "")
+        mobile = _mask_mobile(raw_mob)
+        raw_email = draft.get("email") or (user.get("email", "") if user else "")
+        email = _mask_email(raw_email)
 
         if language == "hi":
             summary = (
@@ -926,6 +973,53 @@ def handle_chat_message(
     draft = session["draft"]
     state = session.get("state", STATE_IDLE)
 
+    # Check if returning to an auth_required session after login
+    if session.get("step") == "auth_required":
+        if user:
+            session["step"] = "idle"
+            pending_desc = (session.get("draft") or {}).get("description")
+            if pending_desc:
+                session["draft"] = {"description": pending_desc}
+            else:
+                session["draft"] = {}
+            low_text = message_text.lower().strip()
+            if low_text in (
+                "continue", "proceed", "yes", "haan", "start", "आगे बढ़ें",
+                "जारी रखें", "shuru karein", "login ho gaya", "logged in",
+                "i have logged in", "i logged in",
+            ):
+                is_complaint_intent = True
+        else:
+            low_text = message_text.lower()
+            if low_text in ("login", "लॉग इन", "log in", "sign in", "signin"):
+                return {
+                    "reply": "Please use the Login option below to sign in to your account.",
+                    "sessionId": session["sessionId"],
+                    "step": "auth_required",
+                    "method": "faq",
+                    "action": {"label": "Login", "href": "/login.html", "target": "_blank"},
+                    "actions": [
+                        {"label": "Login", "href": "/login.html", "target": "_blank"},
+                        {"label": "Register", "href": "/register.html", "target": "_blank"},
+                    ],
+                    "quickReplies": ["Login", "Register", "Cancel"],
+                }
+            if low_text in ("register", "रजिस्टर", "signup", "sign up", "create account"):
+                return {
+                    "reply": "Please use the Register option below to create your account.",
+                    "sessionId": session["sessionId"],
+                    "step": "auth_required",
+                    "method": "faq",
+                    "action": {"label": "Register", "href": "/register.html", "target": "_blank"},
+                    "actions": [
+                        {"label": "Register", "href": "/register.html", "target": "_blank"},
+                        {"label": "Login", "href": "/login.html", "target": "_blank"},
+                    ],
+                    "quickReplies": ["Register", "Login", "Cancel"],
+                }
+            if action_val in ("submit", "raise_complaint", "confirm", "edit") or low_text in ("submit", "confirm"):
+                return _login_required_response(session, language)
+
     # 1. Immutable submitted session check
     if state == STATE_COMPLETED and not _status_intent(message_text):
         if action_val == "done" or message_text.strip().lower() in ("done", "पूर्ण", "finish"):
@@ -955,6 +1049,8 @@ def handle_chat_message(
             or "दूसरी शिकायत" in message_text.lower()
         )
         if starts_another:
+            if not user:
+                return _login_required_response(session, language)
             stored_id = session.get("stored_identity")
             new_session, _ = get_or_create_session(None, user)
             new_draft = {}
@@ -1278,6 +1374,8 @@ def handle_chat_message(
 
     # 8. Fast-path Confirmation State
     if state == STATE_CONFIRMING_FAST_PATH:
+        if not user:
+            return _login_required_response(session, language)
         proposed = draft.get("proposedCategory")
         if (
             action_val == "yes"
@@ -1338,6 +1436,8 @@ def handle_chat_message(
 
     # 9. Editing Choice State
     if state == STATE_EDITING:
+        if not user:
+            return _login_required_response(session, language)
         target = message_text.strip().lower()
         if "category" in target or "श्रेणी" in target:
             draft.pop("category", None)
@@ -1435,6 +1535,9 @@ def handle_chat_message(
             if session.get("reference"):
                 return _done_response(session, language=language)
 
+            if not user:
+                return _login_required_response(session, language)
+
             if not _claim_submission(session):
                 latest = chatbot_sessions().find_one({"sessionId": session["sessionId"]}) or session
                 if latest.get("reference"):
@@ -1523,6 +1626,7 @@ def handle_chat_message(
                     payload,
                     user=user,
                     idempotency_key=current_idempotency_key,
+                    allow_contact_override=True,
                 )
                 if not created or not created.get("id"):
                     raise RuntimeError("Complaint creation returned no reference.")
@@ -1593,8 +1697,10 @@ def handle_chat_message(
 
     # 11. Active Slot Collection State
     if state == STATE_COLLECTING:
-        if session.get("step") == "choose_identity_field":
-            current_step = "choose_identity_field"
+        if not user:
+            return _login_required_response(session, language)
+        if session.get("step") in ("choose_identity_field", "name", "mobile", "email", "scholarId"):
+            current_step = session.get("step")
         else:
             current_step = get_first_missing_slot(draft, user, config)
         if current_step == "confirm":
@@ -2183,7 +2289,12 @@ def handle_chat_message(
     )
 
     if is_complaint_intent:
+        if not user:
+            return _login_required_response(session, language)
+        saved_desc = (session.get("draft") or {}).get("description")
         session["draft"] = {}
+        if saved_desc:
+            session["draft"]["description"] = saved_desc
         update_draft_flow_steps(session["draft"], user, config)
         session["step_history"] = []
         session["invalid_attempts"] = 0
@@ -2205,8 +2316,15 @@ def handle_chat_message(
             "draft": session["draft"],
         }
 
+    # Category selection directly from idle
+    matched_cat = next((c for c in ALLOWED_CATEGORIES if c.lower() == message_text.lower()), None)
+    if matched_cat and not user:
+        return _login_required_response(session, language)
+
     # Fast path only for problem reports
     if _problem_report_intent(message_text):
+        if not user:
+            return _login_required_response(session, language, pending_text=message_text)
         fast_path = detect_fast_path(message_text)
         session["draft"] = {}
         session["step_history"] = []

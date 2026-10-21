@@ -31,6 +31,7 @@ COLLECTIONS = (
     "refresh_tokens",
     "devices",
     "chatbot_sessions",
+    "rate_limit_windows",
 )
 
 
@@ -120,6 +121,10 @@ def _create_indexes(db) -> None:
     db.chatbot_sessions.create_index([("expiresAt", ASCENDING)], expireAfterSeconds=0)
     db.chatbot_sessions.create_index([("updatedAt", DESCENDING)])
 
+    # Shared fixed-window counters keep chatbot quotas consistent across
+    # multiple WSGI workers and instances. MongoDB expires old windows itself.
+    db.rate_limit_windows.create_index([("expiresAt", ASCENDING)], expireAfterSeconds=0)
+
 
 def get_db():
     if _db is None:
@@ -196,6 +201,11 @@ def devices():
 def chatbot_sessions():
     """Server-side chatbot sessions with TTL expiry."""
     return get_db().chatbot_sessions
+
+
+def rate_limit_windows():
+    """Shared, expiring fixed-window rate-limit counters."""
+    return get_db().rate_limit_windows
 
 
 def next_sequence(name: str) -> int:

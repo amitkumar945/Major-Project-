@@ -227,6 +227,7 @@ def create_complaint(
     user: dict = None,
     evidence: list = None,
     idempotency_key: str = None,
+    allow_contact_override: bool = False,
 ) -> dict:
     """Register a complaint: classify it, set the deadline, auto-assign, notify."""
     user = user or {}
@@ -314,14 +315,27 @@ def create_complaint(
         }
     else:
         scholar_id = (user.get("userId") or user.get("scholarId") or "").strip()
+        submitter_payload = payload.get("submitter") or {}
+        # The standard complaint API always snapshots the authenticated account.
+        # The chatbot may opt in after its separate contact-confirmation flow.
+        email = (
+            submitter_payload.get("email") or user.get("email", "")
+            if allow_contact_override
+            else user.get("email", "")
+        )
+        mobile = (
+            submitter_payload.get("mobile") or user.get("mobile", "")
+            if allow_contact_override
+            else user.get("mobile", "")
+        )
         submitted_by = {
             "type": "registered",
             "id": user["id"],
             "name": user.get("name", ""),
             "userId": scholar_id,
             "scholarId": scholar_id,
-            "email": user.get("email", ""),
-            "mobile": user.get("mobile", ""),
+            "email": email,
+            "mobile": mobile,
             "userType": user.get("userType", "Student"),
             "hostel": user.get("hostel", "—"),
             "isVerified": True,

@@ -5,6 +5,27 @@
 
 /* ============================================================== BUTTONS === */
 
+.language-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  color: var(--brand-700);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+.language-toggle:hover { background: var(--surface-alt); }
+.language-toggle:focus-visible { outline: 3px solid var(--amber-500); outline-offset: 2px; }
+.language-toggle--floating { position: fixed; top: 12px; right: 12px; z-index: 1300; }
+
 /* ========================================================= AI ASSISTANT === */
 .dsvv-chat {
   --chat-accent: var(--brand-600);

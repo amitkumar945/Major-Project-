@@ -18,6 +18,7 @@ import { roleLabel, signOut } from './session.js'
 import { getUnreadCount } from '../services/notificationService.js'
 import { APP_NAME, ASSETS, UNIVERSITY_SHORT } from '../utils/constants.js'
 import { mountChatbot } from './chatbot.js'
+import { initLanguage } from './language.js'
 
 /* ------------------------------------------------------------- sidebar --- */
 
@@ -202,6 +203,7 @@ export function renderShell(user, { title }) {
   wireAccountMenu()
   wireLogout()
   refreshUnreadBadge(user)
+  initLanguage()
   mountChatbot()
 }
 

@@ -8,6 +8,7 @@
 import { esc, icon, on, qs } from './dom.js'
 import { currentUser } from './session.js'
 import { mountChatbot } from './chatbot.js'
+import { initLanguage } from './language.js'
 import { HOME_PAGE } from './navigation.js'
 import {
   APP_NAME,
@@ -179,5 +180,6 @@ export function renderFooter(target = '#footer') {
 export function renderPublicChrome(options = {}) {
   renderNavbar('#navbar', options)
   renderFooter()
+  initLanguage()
   mountChatbot()
 }

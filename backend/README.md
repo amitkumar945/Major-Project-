@@ -135,10 +135,14 @@ settings (defaults shown):
 | `CHATBOT_GUEST_IP_LIMIT` | 15 | Guest submissions per client IP per window |
 | `CHATBOT_GUEST_MOBILE_LIMIT` | 5 | Guest submissions per normalized mobile per window |
 
-The limits use an in-process fixed-window counter, so they are per process and
-reset on restart. Multi-worker or multi-instance deployments need a shared
-rate-limit store (for example Redis) to enforce a global quota; Redis is not
-currently part of this deployment. Client identity uses the WSGI peer address.
+Chatbot message and guest-submission limits use MongoDB-backed atomic fixed
+windows by default, so counters are shared across application workers and
+instances. MongoDB expires old counter windows automatically. Set
+`CHATBOT_SHARED_RATE_LIMIT=false` only for a deliberately single-process
+development setup; if MongoDB has a transient counter error, the service falls
+back to a process-local soft limit and logs the failure type without client
+data. Other endpoint limits continue to use the in-process counter. Client
+identity uses the WSGI peer address.
 Forwarded headers are ignored unless `TRUSTED_PROXY_COUNT` is set to the number
 of trusted proxies and the final trusted proxy overwrites `X-Forwarded-For`.
 The Vercel adapter trusts one Vercel hop by default; Vercel documents that it

@@ -5,6 +5,7 @@
 
 import { icon } from './dom.js'
 import { mountChatbot } from './chatbot.js'
+import { initLanguage } from './language.js'
 
 const POINTS = [
   'Register a grievance in under two minutes with photo and location evidence',
@@ -14,6 +15,7 @@ const POINTS = [
 ]
 
 export function authAside() {
+  initLanguage()
   mountChatbot()
   return `
     <div>
