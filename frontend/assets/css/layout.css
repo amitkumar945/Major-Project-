@@ -217,8 +217,22 @@
     flex-direction: column;
     justify-content: space-between;
     padding: var(--sp-10);
-    background: var(--brand-700);
+    background-color: var(--brand-700);
+    background-image:
+      linear-gradient(135deg, rgb(12 27 52 / .3), rgb(12 27 52 / .16)),
+      url('/assets/img/dsvv-campus-login.png');
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
     color: #fff;
+  }
+
+  .auth__university-logo {
+    display: block;
+    width: 100%;
+    max-width: 38rem;
+    height: auto;
+    margin: 0 auto var(--sp-8);
   }
 
   .auth__aside h2 { color: #fff; font-size: var(--fs-3xl); max-width: 18ch; }

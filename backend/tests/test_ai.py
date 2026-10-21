@@ -21,6 +21,10 @@ from ai.nlp_processor import process, stem
         ("Wi-Fi router in the computer lab has no internet connection", "MCA Lab / Computer Lab"),
         ("A crack has appeared in the classroom wall and the plaster is falling", "Nirman Vibhag"),
         ("The wooden door hinge is broken and the furniture needs repair", "Nirman Vibhag"),
+        ("पानी का पाइप लीक हो रहा है", "Jal Kal Vibhag"),
+        ("बिजली का पंखा काम नहीं कर रहा है", "Vidyut Vibhag"),
+        ("कंप्यूटर लैब का प्रिंटर खराब है", "MCA Lab / Computer Lab"),
+        ("कक्षा की दीवार में दरार है", "Nirman Vibhag"),
     ],
 )
 def test_classifier_routes_to_the_right_department(text, expected):
@@ -65,6 +69,7 @@ def test_classifier_never_claims_to_be_a_trained_model():
     [
         ("There is sparking from the exposed live wire, fire hazard", "Urgent"),
         ("A student received an electric shock, this is an emergency", "Urgent"),
+        ("लैब में आग लग गई है", "Urgent"),
         ("The water pipe is broken and no water is coming", "High"),
         ("The fan has stopped working completely", "High"),
         ("The wall paint looks slightly faded, a minor cosmetic request", "Low"),

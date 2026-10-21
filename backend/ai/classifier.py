@@ -27,6 +27,9 @@ DEPARTMENT_KEYWORDS = {
         "toilet": 2, "washroom": 2, "bathroom": 2, "flush": 2, "overflow": 2,
         "purifier": 2, "ro": 2, "tank": 2, "supply": 1, "cooler": 2,
         "seepage": 1, "clog": 2, "blockage": 2, "urinal": 2, "basin": 2,
+        "pani": 3, "paani": 3, "nal": 3, "jal": 3, "tonti": 3, "tunti": 3, "tanki": 3,
+        "pani leak": 3, "paani leak": 3, "paani ki samasya": 3,
+        "पानी": 3, "नल": 3, "जल": 3, "पाइप": 3, "लीकेज": 3,
     },
     "Vidyut Vibhag": {
         "electric": 3, "electricity": 3, "electrical": 3, "wiring": 3,
@@ -36,6 +39,9 @@ DEPARTMENT_KEYWORDS = {
         "tube": 2, "fan": 2, "switch": 2, "geyser": 2, "regulator": 2,
         "inverter": 2, "current": 2, "streetlight": 3, "ac": 1,
         "air conditioner": 2, "supply": 1, "meter": 1, "shock": 2,
+        "bijli": 3, "vidyut": 3, "batti": 3, "pankha": 3, "tar": 3,
+        "switch board": 3, "light chali": 3, "bulb kharab": 3,
+        "बिजली": 3, "विद्युत": 3, "पंखा": 3, "बत्ती": 3, "करंट": 3, "तार": 3,
     },
     "MCA Lab / Computer Lab": {
         "computer": 3, "pc": 3, "laptop": 3, "printer": 3, "projector": 3,
@@ -44,6 +50,9 @@ DEPARTMENT_KEYWORDS = {
         "server": 3, "cpu": 3, "ram": 3, "scanner": 3, "licence": 2,
         "license": 2, "install": 2, "windows": 2, "linux": 2, "terminal": 2,
         "lab": 1, "system": 1, "screen": 2, "cable": 1, "port": 2,
+        "kamputar": 3, "screen kharab": 3, "chal nahi raha": 2,
+        "kaam nahi kar raha": 2, "lab computer": 3,
+        "कंप्यूटर": 3, "लैपटॉप": 3, "प्रिंटर": 3, "इंटरनेट": 3, "लैब": 2,
     },
     "Nirman Vibhag": {
         "building": 3, "wall": 3, "plaster": 3, "ceiling": 3, "roof": 3,
@@ -53,12 +62,21 @@ DEPARTMENT_KEYWORDS = {
         "window": 2, "door": 2, "lock": 2, "hinge": 2, "civil": 3,
         "repair": 1, "renovation": 3, "masonry": 3, "cement": 3,
         "staircase": 2, "railing": 2, "seepage": 2, "damp": 2,
+        "deewar": 3, "diwar": 3, "chhat": 3, "marammat": 3, "darwaja": 3,
+        "darwaza": 3, "khidki": 3, "farsh": 3, "nirman": 3, "kursi": 3, "mez": 3,
+        "tut gaya": 2, "toot gaya": 2,
+        "दीवार": 3, "दरार": 3, "छत": 3, "मरम्मत": 3, "दरवाजा": 3, "दरवाज़ा": 3,
+        "खिड़की": 3, "फर्श": 3, "निर्माण": 3, "कुर्सी": 3, "मेज़": 3,
     },
 }
 
 # Pre-stem the dictionary once so lookups match stemmed complaint tokens.
 _STEMMED_KEYWORDS = {
     department: {stem(word): weight for word, weight in words.items() if " " not in word}
+    for department, words in DEPARTMENT_KEYWORDS.items()
+}
+_NATIVE_SCRIPT_KEYWORDS = {
+    department: {word: weight for word, weight in words.items() if not word.isascii()}
     for department, words in DEPARTMENT_KEYWORDS.items()
 }
 _PHRASE_KEYWORDS = {
@@ -76,6 +94,7 @@ def score_departments(text: str, processed: dict = None) -> list:
     processed = processed or process(text)
     stem_set = processed["stemSet"]
     cleaned = processed["cleaned"]
+    original = (text or "").lower()
 
     results = []
     for department in DEPARTMENT_NAMES:
@@ -91,6 +110,10 @@ def score_departments(text: str, processed: dict = None) -> list:
             if phrase in cleaned:
                 score += weight
                 matched.append(phrase)
+        for keyword, weight in _NATIVE_SCRIPT_KEYWORDS.get(department, {}).items():
+            if keyword in original:
+                score += weight
+                matched.append(keyword)
 
         results.append({"department": department, "score": score, "matched": matched})
 

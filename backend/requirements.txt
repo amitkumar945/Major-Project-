@@ -11,6 +11,7 @@ Flask-Cors>=4.0            # CORS for the frontend origin
 pymongo>=4.6               # MongoDB driver
 PyJWT>=2.8                 # JWT creation and verification
 python-dotenv>=1.0         # load .env
+openai>=1.30               # official OpenAI API client
 bcrypt>=4.1                # password hashing
 Werkzeug>=3.0              # secure_filename, HTTP exceptions (ships with Flask)
 

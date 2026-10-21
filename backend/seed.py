@@ -73,19 +73,19 @@ SEED_OFFICERS = [
 
 SEED_STUDENTS = [
     {
-        "id": "USR-1001", "name": "Rakesh Patidar", "userId": "MCA/2024/018",
+        "id": "USR-1001", "name": "Rakesh Patidar", "userId": "MCA/2024/018", "scholarId": "MCA/2024/018",
         "email": "student@dsvv.ac.in", "department": "MCA - Department of Computer Science",
         "course": "Master of Computer Applications", "year": "2nd Year",
         "hostel": "Gayatri Bhavan, Room 214", "userType": "Student", "avatarColor": "#4f46e5",
     },
     {
-        "id": "USR-1002", "name": "Sneha Bhardwaj", "userId": "MSC/2025/044",
+        "id": "USR-1002", "name": "Sneha Bhardwaj", "userId": "MSC/2025/044", "scholarId": "MSC/2025/044",
         "email": "sneha.bhardwaj@dsvv.ac.in", "department": "M.Sc. Yogic Science",
         "course": "M.Sc. Yogic Science", "year": "1st Year",
         "hostel": "Saraswati Bhavan, Room 108", "userType": "Student", "avatarColor": "#059669",
     },
     {
-        "id": "USR-1003", "name": "Aditya Nautiyal", "userId": "BCA/2024/091",
+        "id": "USR-1003", "name": "Aditya Nautiyal", "userId": "BCA/2024/091", "scholarId": "BCA/2024/091",
         "email": "aditya.nautiyal@dsvv.ac.in", "department": "BCA - Department of Computer Science",
         "course": "Bachelor of Computer Applications", "year": "3rd Year",
         "hostel": "Chetna Bhavan, Room 302", "userType": "Student", "avatarColor": "#d97706",
@@ -150,6 +150,7 @@ def _insert_user(record: dict, role: str, password: str, user_type: str) -> bool
         "passwordHash": auth_service.hash_password(password),
     }
     document.setdefault("userId", record.get("employeeId", ""))
+    document.setdefault("scholarId", record.get("scholarId") or record.get("userId", ""))
     document.setdefault("course", record.get("department", ""))
     document.setdefault("year", "—")
     document.setdefault("hostel", "—")

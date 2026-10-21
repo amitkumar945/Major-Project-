@@ -30,6 +30,8 @@ COLLECTIONS = (
     # clearing them only forces a re-login / re-registration.
     "refresh_tokens",
     "devices",
+    "chatbot_sessions",
+    "rate_limit_windows",
 )
 
 
@@ -66,6 +68,7 @@ def _create_indexes(db) -> None:
     db.users.create_index([("department", ASCENDING)])
 
     db.complaints.create_index([("id", ASCENDING)], unique=True)
+    db.complaints.create_index([("_chatbotSessionId", ASCENDING)], unique=True, sparse=True)
     db.complaints.create_index([("submittedBy.id", ASCENDING)])
     db.complaints.create_index([("assignedOfficer.id", ASCENDING)])
     db.complaints.create_index([("status", ASCENDING)])
@@ -112,6 +115,15 @@ def _create_indexes(db) -> None:
     # device updates rather than duplicates it.
     db.devices.create_index([("token", ASCENDING)], unique=True)
     db.devices.create_index([("userId", ASCENDING)])
+
+    # Chatbot state sessions: unguessable sessionId, automatically cleaned up by TTL
+    db.chatbot_sessions.create_index([("sessionId", ASCENDING)], unique=True)
+    db.chatbot_sessions.create_index([("expiresAt", ASCENDING)], expireAfterSeconds=0)
+    db.chatbot_sessions.create_index([("updatedAt", DESCENDING)])
+
+    # Shared fixed-window counters keep chatbot quotas consistent across
+    # multiple WSGI workers and instances. MongoDB expires old windows itself.
+    db.rate_limit_windows.create_index([("expiresAt", ASCENDING)], expireAfterSeconds=0)
 
 
 def get_db():
@@ -184,6 +196,16 @@ def refresh_tokens():
 def devices():
     """Registered push-notification devices, one row per device token."""
     return get_db().devices
+
+
+def chatbot_sessions():
+    """Server-side chatbot sessions with TTL expiry."""
+    return get_db().chatbot_sessions
+
+
+def rate_limit_windows():
+    """Shared, expiring fixed-window rate-limit counters."""
+    return get_db().rate_limit_windows
 
 
 def next_sequence(name: str) -> int:

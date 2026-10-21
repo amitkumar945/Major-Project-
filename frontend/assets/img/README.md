@@ -9,7 +9,9 @@ same image.
 | File | Used by | Notes |
 | ---- | ------- | ----- |
 | `dsvv-logo.png` | Header, footer, login/register aside | Official DSVV crest. |
-| `campus.svg` | Home page hero | Campus illustration. |
+| `dsvv-campus.jpg` | Public home page | Campus photograph. |
+| `dsvv-campus-entrance.png` | Student dashboard hero | DSVV campus entrance photograph. |
+| `campus.svg` | Unused legacy asset | Campus illustration. |
 
 To replace the crest, save the new image as `dsvv-logo.png` in this folder. If
 you use a different filename or format, update `ASSETS.logo` in

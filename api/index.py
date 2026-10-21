@@ -13,6 +13,9 @@ os.environ.setdefault("FLASK_RUN_FROM_CLI", "1")
 os.environ["SERVE_FRONTEND"] = "true"
 os.environ["FRONTEND_FOLDER"] = str(FRONTEND)
 os.environ.setdefault("VERCEL", "1")
+# Vercel overwrites X-Forwarded-For with the public requester IP. Trust that
+# single platform hop unless the deployment explicitly configures otherwise.
+os.environ.setdefault("TRUSTED_PROXY_COUNT", "1")
 
 def _build_app():
     try:

@@ -267,7 +267,7 @@ export const UNIVERSITY_LOCATION = 'Haridwar, Uttarakhand'
  */
 export const ASSETS = {
   logo: '/assets/img/dsvv-logo.png',
-  campus: '/assets/img/campus.svg',
+  campus: '/assets/img/dsvv-campus-entrance.png',
 }
 
 /** Grievance cell contact details that already exist in the project. */

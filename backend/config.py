@@ -196,6 +196,34 @@ class Config:
     RATE_LIMIT_AUTH = _int("RATE_LIMIT_AUTH", 10)        # requests per window
     RATE_LIMIT_OTP = _int("RATE_LIMIT_OTP", 5)
     RATE_LIMIT_WINDOW = _int("RATE_LIMIT_WINDOW", 60)    # seconds
+    RATE_LIMIT_CHATBOT = _int("RATE_LIMIT_CHATBOT", 30)
+    CHATBOT_RATE_WINDOW = _int("CHATBOT_RATE_WINDOW", 60)
+    CHATBOT_GUEST_RATE_WINDOW = _int("CHATBOT_GUEST_RATE_WINDOW", 300)
+    CHATBOT_GUEST_IP_LIMIT = _int("CHATBOT_GUEST_IP_LIMIT", 15)
+    CHATBOT_GUEST_MOBILE_LIMIT = _int("CHATBOT_GUEST_MOBILE_LIMIT", 5)
+    CHATBOT_SHARED_RATE_LIMIT = _bool("CHATBOT_SHARED_RATE_LIMIT", True)
+    CHATBOT_ASK_IDENTITY = _bool("CHATBOT_ASK_IDENTITY", True)
+
+    # Configure only the number of reverse proxies that are trusted to
+    # overwrite X-Forwarded-For. Zero ignores forwarded headers entirely.
+    TRUSTED_PROXY_COUNT = _int("TRUSTED_PROXY_COUNT", 0)
+
+    # ------------------------------------------------------------ help chatbot
+    # OPENAI_* is preferred; CHATBOT_AI_* stays as a backwards-compatible
+    # fallback for existing deployments.
+    OPENAI_API_KEY = _str("OPENAI_API_KEY", _str("CHATBOT_AI_API_KEY", ""))
+    OPENAI_MODEL = _str("OPENAI_MODEL", _str("CHATBOT_AI_MODEL", "gpt-4o-mini"))
+    OPENAI_BASE_URL = _str(
+        "OPENAI_BASE_URL",
+        _str("CHATBOT_AI_BASE_URL", "https://api.openai.com/v1"),
+    )
+    OPENAI_TIMEOUT = _int("OPENAI_TIMEOUT", _int("CHATBOT_AI_TIMEOUT", 12))
+    CHATBOT_MAX_REQUEST_BYTES = _int("CHATBOT_MAX_REQUEST_BYTES", 8192)
+
+    CHATBOT_AI_BASE_URL = OPENAI_BASE_URL
+    CHATBOT_AI_API_KEY = OPENAI_API_KEY
+    CHATBOT_AI_MODEL = OPENAI_MODEL
+    CHATBOT_AI_TIMEOUT = OPENAI_TIMEOUT
 
     # ------------------------------------------------- SLA auto-escalation
     # `escalation_service.run_sla_check()` escalates complaints whose deadline
@@ -242,6 +270,9 @@ class TestConfig(Config):
     OTP_DEV_MODE = True
     IS_TEST = True
     RATE_LIMIT_ENABLED = False
+    CHATBOT_SHARED_RATE_LIMIT = False
+    OPENAI_API_KEY = ""
+    CHATBOT_AI_API_KEY = ""
     DEBUG = False
     SERVE_FRONTEND = False
     # Never let a background thread run during the suite: it would touch the

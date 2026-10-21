@@ -46,7 +46,7 @@ function welcome(user) {
         </a>
       </div>
       <div class="student-hero__art">
-        <img src="${esc(ASSETS.campus)}" alt="Illustrated university campus">
+        <img src="${esc(ASSETS.campus)}" alt="DSVV campus entrance">
         <span class="student-hero__art-label">Campus services</span>
       </div>
     </section>`

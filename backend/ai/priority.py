@@ -25,6 +25,11 @@ URGENT_KEYWORDS = {
     "collapsed", "falling", "shock", "electrocution", "emergency", "unsafe",
     "hazard", "server room", "gas leak", "flood", "flooding", "live wire",
     "exposed wire", "accident", "bleeding", "trapped",
+    "aag", "chingaari", "current lag", "karant lag",
+}
+_NATIVE_URGENT_KEYWORDS = {
+    "आग", "धुआँ", "धुआ", "चिंगारी", "करंट", "बिजली का झटका",
+    "गैस रिसाव", "खतरा", "आपातकाल",
 }
 
 # Service is broken and blocking people.
@@ -64,10 +69,14 @@ def predict(title: str = "", description: str = "", processed: dict = None) -> d
     then cosmetic wording; anything else is Medium. A scale signal can lift a
     Low/Medium complaint by one level, but never reaches Urgent on its own.
     """
-    text = clean_text(f"{title} {description}")
-    processed = processed or process(f"{title} {description}")
+    source = f"{title} {description}"
+    text = clean_text(source)
+    processed = processed or process(source)
 
     urgent_hits = _matches(text, URGENT_KEYWORDS)
+    urgent_hits.extend(
+        keyword for keyword in _NATIVE_URGENT_KEYWORDS if keyword in source.lower()
+    )
     high_hits = _matches(text, HIGH_KEYWORDS)
     low_hits = _matches(text, LOW_KEYWORDS)
     scale_hits = _matches(text, SCALE_KEYWORDS)

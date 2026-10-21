@@ -2074,7 +2074,7 @@
   background: #dceaf7;
 }
 
-.student-hero__art img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.student-hero__art img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; }
 .student-hero__art-label {
   position: absolute;
   right: .75rem;

@@ -1,31 +1,29 @@
-"""
-In-process rate limiting for the sensitive endpoints (login, register, OTP).
+"""Rate limiting for sensitive endpoints, with shared chatbot quotas."""
 
-A fixed-window counter kept in memory: no Redis, no extra dependency, which
-suits a single-process campus deployment. Behind multiple workers each process
-would keep its own window - swap `_HITS` for Redis if that ever matters.
-"""
-
+import hashlib
+import logging
 import threading
 import time
+from datetime import datetime, timezone
 from functools import wraps
 
-from flask import current_app, request
+from flask import current_app, has_app_context, request
+from pymongo import ReturnDocument
 
 from utils.responses import error
 
 # (bucket, client) -> [window_start, count]
 _HITS = {}
 _LOCK = threading.Lock()
+logger = logging.getLogger(__name__)
 # Drop expired entries once the table grows past this, so a long-running
 # process cannot accumulate unbounded keys.
 _CLEANUP_THRESHOLD = 1000
 
 
 def _client_key() -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    # ProxyFix, when explicitly enabled, has already selected a trusted hop.
+    # Never consume X-Forwarded-For directly from an arbitrary client.
     return request.remote_addr or "unknown"
 
 
@@ -35,10 +33,51 @@ def _cleanup(now: float, window: int) -> None:
         _HITS.pop(key, None)
 
 
-def check(bucket: str, limit: int, window: int) -> tuple:
+def check(bucket: str, limit: int, window: int, client_key: str = None) -> tuple:
     """Register a hit. Returns (allowed, seconds_until_reset)."""
-    key = (bucket, _client_key())
     now = time.time()
+    window = max(1, int(window))
+    client = client_key or _client_key()
+
+    # Mongo's atomic upsert is shared by all application workers. Hash the
+    # client key so IP/mobile-derived identifiers are not stored in cleartext.
+    shared_enabled = (
+        has_app_context()
+        and current_app.config.get("CHATBOT_SHARED_RATE_LIMIT", True)
+        and bucket.startswith("chatbot")
+    )
+    if shared_enabled:
+        window_start = int(now // window) * window
+        window_end = window_start + window
+        digest = hashlib.sha256(f"{bucket}:{client}".encode("utf-8")).hexdigest()
+        document_id = f"{bucket}:{digest}:{window_start}"
+        try:
+            from database import rate_limit_windows
+
+            record = rate_limit_windows().find_one_and_update(
+                {"_id": document_id},
+                {
+                    "$inc": {"count": 1},
+                    "$setOnInsert": {
+                        "expiresAt": datetime.fromtimestamp(
+                            window_end + 5, tz=timezone.utc
+                        )
+                    },
+                },
+                upsert=True,
+                return_document=ReturnDocument.AFTER,
+                projection={"count": 1},
+            )
+            count = int((record or {}).get("count", 0))
+            if count > limit:
+                return False, max(1, int(window_end - now) + 1)
+            return True, 0
+        except Exception as exc:
+            # Keep the endpoint available if the shared counter store has a
+            # transient failure; local limiting still provides a soft guard.
+            logger.warning("Shared chatbot rate limit unavailable (%s)", type(exc).__name__)
+
+    key = (bucket, client)
 
     with _LOCK:
         if len(_HITS) > _CLEANUP_THRESHOLD:
@@ -69,11 +108,18 @@ def rate_limit(bucket: str = "default", limit: int = None, window: int = None):
             if not current_app.config.get("RATE_LIMIT_ENABLED", True):
                 return fn(*args, **kwargs)
 
-            effective_window = window or current_app.config.get("RATE_LIMIT_WINDOW", 60)
+            if window is not None:
+                effective_window = window
+            elif bucket == "chatbot":
+                effective_window = current_app.config.get("CHATBOT_RATE_WINDOW", 60)
+            else:
+                effective_window = current_app.config.get("RATE_LIMIT_WINDOW", 60)
             if limit is not None:
                 effective_limit = limit
             elif bucket == "otp":
                 effective_limit = current_app.config.get("RATE_LIMIT_OTP", 5)
+            elif bucket == "chatbot":
+                effective_limit = current_app.config.get("RATE_LIMIT_CHATBOT", 30)
             else:
                 effective_limit = current_app.config.get("RATE_LIMIT_AUTH", 10)
 

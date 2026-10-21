@@ -207,14 +207,20 @@ def delete(notification_id: str, user_id: str) -> bool:
 # One function per lifecycle event, so routes never hand-write message text.
 
 
+def _submitter_id(complaint: dict) -> str | None:
+    return (complaint.get("submittedBy") or {}).get("id") or None
+
+
 def complaint_submitted(complaint: dict) -> None:
-    create(
-        complaint["submittedBy"]["id"],
-        NOTIFICATION_TYPES["SUBMITTED"],
-        "Complaint registered",
-        f"Your complaint {complaint['id']} has been registered and sent to {complaint['department']}.",
-        complaint["id"],
-    )
+    submitter = _submitter_id(complaint)
+    if submitter:
+        create(
+            submitter,
+            NOTIFICATION_TYPES["SUBMITTED"],
+            "Complaint registered",
+            f"Your complaint {complaint['id']} has been registered and sent to {complaint['department']}.",
+            complaint["id"],
+        )
     officer = complaint.get("assignedOfficer")
     if officer:
         create(
@@ -234,40 +240,46 @@ def officer_assigned(complaint: dict, officer: dict) -> None:
         f"{complaint['title']} has been assigned to you by the administration.",
         complaint["id"],
     )
-    create(
-        complaint["submittedBy"]["id"],
-        NOTIFICATION_TYPES["OFFICER_ASSIGNED"],
-        "Officer assigned",
-        f"{officer['name']} is now handling your complaint {complaint['id']}.",
-        complaint["id"],
-    )
+    submitter = _submitter_id(complaint)
+    if submitter:
+        create(
+            submitter,
+            NOTIFICATION_TYPES["OFFICER_ASSIGNED"],
+            "Officer assigned",
+            f"{officer['name']} is now handling your complaint {complaint['id']}.",
+            complaint["id"],
+        )
 
 
 def status_changed(complaint: dict, status: str, actor_name: str = "") -> None:
-    create(
-        complaint["submittedBy"]["id"],
-        NOTIFICATION_TYPES["STATUS_CHANGED"],
-        f"Status updated to {status}",
-        f"Your complaint {complaint['id']} is now marked \"{status}\".",
-        complaint["id"],
-    )
+    submitter = _submitter_id(complaint)
+    if submitter:
+        create(
+            submitter,
+            NOTIFICATION_TYPES["STATUS_CHANGED"],
+            f"Status updated to {status}",
+            f"Your complaint {complaint['id']} is now marked \"{status}\".",
+            complaint["id"],
+        )
 
 
 def resolution_submitted(complaint: dict) -> None:
-    create(
-        complaint["submittedBy"]["id"],
-        NOTIFICATION_TYPES["RESOLVED"],
-        "Complaint resolved",
-        f"Your complaint {complaint['id']} has been resolved. Please rate the work.",
-        complaint["id"],
-    )
-    create(
-        complaint["submittedBy"]["id"],
-        NOTIFICATION_TYPES["FEEDBACK_REQUESTED"],
-        "Feedback requested",
-        f"How satisfied are you with the resolution of {complaint['id']}?",
-        complaint["id"],
-    )
+    submitter = _submitter_id(complaint)
+    if submitter:
+        create(
+            submitter,
+            NOTIFICATION_TYPES["RESOLVED"],
+            "Complaint resolved",
+            f"Your complaint {complaint['id']} has been resolved. Please rate the work.",
+            complaint["id"],
+        )
+        create(
+            submitter,
+            NOTIFICATION_TYPES["FEEDBACK_REQUESTED"],
+            "Feedback requested",
+            f"How satisfied are you with the resolution of {complaint['id']}?",
+            complaint["id"],
+        )
 
 
 def complaint_reopened(complaint: dict, reason: str = "") -> None:
@@ -283,17 +295,21 @@ def complaint_reopened(complaint: dict, reason: str = "") -> None:
 
 
 def complaint_escalated(complaint: dict, level: int, authority: str) -> None:
-    recipients = [complaint["submittedBy"]["id"]]
+    recipients = []
+    submitter = _submitter_id(complaint)
+    if submitter:
+        recipients.append(submitter)
     if complaint.get("assignedOfficer"):
         recipients.append(complaint["assignedOfficer"]["id"])
 
-    create_many(
-        recipients,
-        NOTIFICATION_TYPES["ESCALATED"],
-        f"Complaint escalated to level {level}",
-        f"{complaint['id']} has been escalated to {authority} after crossing its deadline.",
-        complaint["id"],
-    )
+    if recipients:
+        create_many(
+            recipients,
+            NOTIFICATION_TYPES["ESCALATED"],
+            f"Complaint escalated to level {level}",
+            f"{complaint['id']} has been escalated to {authority} after crossing its deadline.",
+            complaint["id"],
+        )
 
 
 def deadline_approaching(complaint: dict, days_left: int) -> None:
@@ -306,3 +322,22 @@ def deadline_approaching(complaint: dict, days_left: int) -> None:
             f"{complaint['id']} is due in {days_left} day(s).",
             complaint["id"],
         )
+
+
+def notify_admins(title: str, message: str, complaint_id: str = None) -> list:
+    """Send an in-app notice to active administrators (best-effort)."""
+    try:
+        from database import users
+        admin_rows = list(users().find({"role": "admin", "isActive": True}, {"id": 1}))
+        admin_ids = [row["id"] for row in admin_rows if row.get("id")]
+        if admin_ids:
+            return create_many(
+                admin_ids,
+                NOTIFICATION_TYPES["SUBMITTED"],
+                title,
+                message,
+                complaint_id,
+            )
+    except Exception:
+        logger.exception("Failed to dispatch admin notification for %s", complaint_id)
+    return []
